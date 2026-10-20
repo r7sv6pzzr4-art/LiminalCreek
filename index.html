@@ -44,11 +44,11 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 #dockCredits a{color:#c8e4cb}
 
 /* Small, precise editing vertices. */
-.leaflet-div-icon.leaflet-editing-icon{width:10px!important;height:10px!important;margin-left:-5px!important;margin-top:-5px!important;border-radius:50%;border:2px solid #fff!important;background:#d65a37!important;box-shadow:0 0 0 1px #73321e}
+.leaflet-div-icon.leaflet-editing-icon{width:12px!important;height:12px!important;margin-left:-6px!important;margin-top:-6px!important;border-radius:50%;border:2px solid #fff!important;background:#d65a37!important;box-shadow:0 0 0 1px #73321e}
 /* Leaflet.draw uses opacity .6 for intermediate add-vertex handles. */
 .leaflet-div-icon.leaflet-editing-icon.leaflet-marker-draggable{opacity:1}
-.leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:9px!important;height:9px!important;margin-left:-4.5px!important;margin-top:-4.5px!important;background:#90d9f5!important;border:1px solid #276d94!important;box-shadow:0 0 0 1px #e4f7ff;opacity:.9!important}
-.leaflet-draw-toolbar a.liminal-exclude-tool{background-color:#fff!important;color:transparent!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M5 7 L17 4 L22 13 L17 22 L5 18 Z' fill='none' stroke='%234a625c' stroke-width='1.7' stroke-linejoin='round'/%3E%3Cpath d='M4 22 L22 4' stroke='%23dc773d' stroke-width='2.7' stroke-linecap='round'/%3E%3C/svg%3E")!important;background-size:26px 26px!important;background-position:center!important;background-repeat:no-repeat!important;text-decoration:none}
+.leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:7px!important;height:7px!important;margin-left:-3.5px!important;margin-top:-3.5px!important;background:#90d9f5!important;border:1px solid #276d94!important;box-shadow:0 0 0 1px #e4f7ff;opacity:.9!important}
+.leaflet-draw-toolbar a.liminal-exclude-tool{display:block!important;width:30px!important;height:30px!important;background-color:#fff!important;color:transparent!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M5 7 L17 4 L22 13 L17 22 L5 18 Z' fill='none' stroke='%234a625c' stroke-width='1.7' stroke-linejoin='round'/%3E%3Cpath d='M4 22 L22 4' stroke='%23dc773d' stroke-width='2.7' stroke-linecap='round'/%3E%3C/svg%3E")!important;background-size:26px 26px!important;background-position:center!important;background-repeat:no-repeat!important;text-decoration:none}
 .leaflet-draw-toolbar a.liminal-exclude-tool:hover{background-color:#e6ebe5!important}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
@@ -146,7 +146,9 @@ const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon
 const originalOnAdd=drawControl.onAdd.bind(drawControl);
 drawControl.onAdd=function(m){
  const element=originalOnAdd(m);
- const drawBar=element.querySelector('.leaflet-draw-toolbar-top');
+ // Leaflet.draw uses leaflet-draw-toolbar-top on some releases, and just
+ // leaflet-draw-toolbar on others. Match both so the tool is reliably shown.
+ const drawBar=element.querySelector('.leaflet-draw-toolbar-top, .leaflet-draw-toolbar');
  if(drawBar){
   const holder=document.createElement('div');holder.className='leaflet-draw-toolbar';
   const link=document.createElement('a');link.href='#';link.className='liminal-exclude-tool';
