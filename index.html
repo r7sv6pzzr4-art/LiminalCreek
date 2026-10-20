@@ -63,6 +63,7 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 <p class="small">Experimental controls: three responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="./sampling.js"></script>
 <script>
 (()=>{'use strict';
 const KEY='liminalcreek-v01', DAYMAX=3, FT=0.3048;
@@ -123,7 +124,17 @@ document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{currentV=b.datas
 $('save').onclick=()=>{const p=loc(),v=currentV;if(!p||usedToday(state.person)>=DAYMAX)return;if(!v||!chosen.length||v!=='neutral'&&!$('strength').value){info('feedback','Please select an impression, a description, and strength when applicable.');return}state.responses.push({pairId:p.id,person:state.person,coordinate:p[state.person],valence:v,descriptions:[...chosen],strength:v==='neutral'?null:+$('strength').value,note:$('note').value.trim(),date:today(),time:new Date().toISOString(),sampling:'broad'});state.cursor[state.person]++;saveState();placePresented=false;setDockCollapsed(false);resetForm();info('feedback','Impression recorded. Choose “Present a place” when you are ready for another.');refresh()};
 $('skip').onclick=()=>{info('feedback','You can return to this place later. No impression recorded.')};
 $('person').onchange=e=>{state.person=e.target.value;placePresented=false;saveState();resetForm();refresh()};
-$('generate').onclick=()=>{const b=bbox(),count=Math.max(2,Math.min(2000,+$('pairs').value||100)),max=Math.max(0,Math.min(1000,+$('separation').value||0))*FT;if(!b){info('setupStatus','Draw at least one eligible polygon first.');return}if(state.responses.length&&!confirm('Regenerating removes existing prototype responses. Continue?'))return;let generated=[];for(let i=0;i<count;i++){let center=randomEligible(b);if(!center)break;let a=center,other=null;for(let j=0;j<500;j++){let candidate=offset(a,max);if(eligible(candidate)){other=candidate;break}}if(other)generated.push({id:i+1,A:a,B:other})}if(!generated.length){info('setupStatus','Could not find paired locations. Expand the eligible area or reduce max offset.');return}state.pairs=generated;state.responses=[];state.queues={A:shuffle(generated.map((_,i)=>i)),B:shuffle(generated.map((_,i)=>i))};state.cursor={A:0,B:0};placePresented=false;saveState();info('setupStatus',generated.length+' pairs generated; independently shuffled for both participants.');page('place')};
+$('generate').onclick=()=>{
+ const b=bbox(),count=Math.max(2,Math.min(2000,+$('pairs').value||100)),max=Math.max(0,Math.min(1000,+$('separation').value||0))*FT;
+ if(!b){info('setupStatus','Draw at least one eligible polygon first.');return}
+ if(state.responses.length&&!confirm('Regenerating removes existing prototype responses. Continue?'))return;
+ try{
+  const generated=LiminalSampling.generate({count,bounds:b,eligible,maxSeparationMeters:max,report:x=>info('setupStatus','Selected '+x.selected+' spatially balanced pairs from '+x.candidateCount+' candidate sites.')});
+  state.pairs=generated;state.responses=[];
+  state.queues={A:shuffle(generated.map((_,i)=>i)),B:shuffle(generated.map((_,i)=>i))};
+  state.cursor={A:0,B:0};placePresented=false;saveState();page('place');
+ }catch(err){info('setupStatus',err.message)}
+};
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminalcreek-prototype.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 $('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
