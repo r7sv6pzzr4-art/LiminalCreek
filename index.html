@@ -47,9 +47,9 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 .leaflet-div-icon.leaflet-editing-icon{width:10px!important;height:10px!important;margin-left:-5px!important;margin-top:-5px!important;border-radius:50%;border:2px solid #fff!important;background:#d65a37!important;box-shadow:0 0 0 1px #73321e}
 /* Leaflet.draw uses opacity .6 for intermediate add-vertex handles. */
 .leaflet-div-icon.leaflet-editing-icon.leaflet-marker-draggable{opacity:1}
-.leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:7px!important;height:7px!important;margin-left:-3.5px!important;margin-top:-3.5px!important;background:#b9bba9!important;border:1px solid #587063!important;box-shadow:none;opacity:.55!important}
-.leaflet-draw-toolbar a.liminal-exclude-tool{background-image:none!important;background:#385249;color:#f0c6a1;text-align:center;font:bold 19px/26px system-ui,sans-serif;text-decoration:none}
-.leaflet-draw-toolbar a.liminal-exclude-tool:hover{background:#526b5a}
+.leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:9px!important;height:9px!important;margin-left:-4.5px!important;margin-top:-4.5px!important;background:#90d9f5!important;border:1px solid #276d94!important;box-shadow:0 0 0 1px #e4f7ff;opacity:.9!important}
+.leaflet-draw-toolbar a.liminal-exclude-tool{background-color:#fff!important;color:transparent!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M5 7 L17 4 L22 13 L17 22 L5 18 Z' fill='none' stroke='%234a625c' stroke-width='1.7' stroke-linejoin='round'/%3E%3Cpath d='M4 22 L22 4' stroke='%23dc773d' stroke-width='2.7' stroke-linecap='round'/%3E%3C/svg%3E")!important;background-size:26px 26px!important;background-position:center!important;background-repeat:no-repeat!important;text-decoration:none}
+.leaflet-draw-toolbar a.liminal-exclude-tool:hover{background-color:#e6ebe5!important}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
@@ -80,11 +80,12 @@ let state;try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){}state ||= {p
 const $=id=>document.getElementById(id), saveState=()=>localStorage.setItem(KEY,JSON.stringify(state)), info=(id,s)=>{$(id).textContent=s}, today=()=>new Date().toLocaleDateString('en-CA');
 const map=L.map('map',{zoomControl:true}).setView([40.333,-74.165],13);
 const aerial=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2007',{layers:'Natural2007',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2007 aerial imagery',maxZoom:20});
+const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2020 aerial imagery',maxZoom:20});
 const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
 aerial.on('tileerror',()=>info('setupStatus','NJ aerial imagery failed to load; use OpenStreetMap layer while service configuration is checked.'));
-L.control.layers({'OpenStreetMap':osm,'NJ 2007 aerial (experimental)':aerial},{}).addTo(map);
+L.control.layers({'NJ 2007 aerial':aerial,'NJ 2020 aerial':aerial2020,'OpenStreetMap':osm},{}).addTo(map);
 aerial.addTo(map);osm.remove();
-map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':'NJGIN 2007 imagery'});
+map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':e.layer===aerial2020?'NJGIN 2020 imagery':'NJGIN 2007 imagery'});
 const polygons=new L.FeatureGroup().addTo(map), areaFill=L.geoJSON(null,{style:{color:'transparent',weight:0,fillColor:'#b7d6ae',fillOpacity:.23},interactive:false}).addTo(map), dotLayer=L.layerGroup().addTo(map), previewLayer=L.layerGroup().addTo(map);
 // Leaflet.draw cannot conveniently select the interior of polygon holes.
 // Represent exclusions as editable overlay rings and reconstruct the GeoJSON holes on save.
@@ -149,7 +150,7 @@ drawControl.onAdd=function(m){
  if(drawBar){
   const holder=document.createElement('div');holder.className='leaflet-draw-toolbar';
   const link=document.createElement('a');link.href='#';link.className='liminal-exclude-tool';
-  link.textContent='−';link.title='Draw exclusion area';link.setAttribute('aria-label','Draw exclusion area');
+  link.textContent='';link.title='Draw exclusion area';link.setAttribute('aria-label','Draw exclusion area');
   holder.appendChild(link);drawBar.parentNode.insertBefore(holder,drawBar.nextSibling);
   L.DomEvent.disableClickPropagation(holder);
   L.DomEvent.on(link,'click',e=>{
