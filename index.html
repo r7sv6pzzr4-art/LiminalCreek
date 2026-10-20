@@ -59,10 +59,10 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 <div class="panel"><label for="person">Prototype participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
 <label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="50">
 <label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
-<div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
+<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
 <p class="small">Experimental controls: three responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="./sampling.js"></script>
 <script>
 (()=>{'use strict';
@@ -154,7 +154,44 @@ $('generate').onclick=()=>{
   state.cursor={A:0,B:0};placePresented=false;saveState();page('place');
  }catch(err){info('setupStatus',err.message)}
 };
-$('export').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminalcreek-prototype.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+function downloadStudy(name){
+ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('joinAreas').onclick=()=>{
+ if(!window.turf){info('setupStatus','The polygon processing library did not load. Check the connection and refresh.');return}
+ const original=state.polygons?.features||[];
+ if(!original.length){info('setupStatus','Draw or import some eligible areas first.');return}
+ if(!confirm('Join overlapping/touching eligible areas and simplify their outlines? A backup will be downloaded first. You can undo by importing that backup.'))return;
+ try{
+  let merged=null;
+  for(const f of original){
+   if(!f.geometry||!['Polygon','MultiPolygon'].includes(f.geometry.type))continue;
+   let cleaned=turf.cleanCoords(f);
+   if(!merged){merged=cleaned;continue}
+   try{merged=turf.union(merged,cleaned)}catch(err){
+    // Some drawings can have invalid or nearly intersecting edges.
+    // Buffering by zero repairs many self-intersections without expanding coverage.
+    let a=turf.buffer(merged,0,{units:'meters'}),b=turf.buffer(cleaned,0,{units:'meters'});
+    merged=turf.union(a,b);
+   }
+  }
+  if(!merged)throw Error('No polygon geometry found.');
+  const beforeArea=turf.area(merged);
+  let simplified=turf.simplify(merged,{tolerance:0.00001,highQuality:true,mutate:false});
+  let afterArea=turf.area(simplified);
+  // Avoid visibly modifying the sampled region if simplification causes unusual loss.
+  if(beforeArea>0&&Math.abs(afterArea-beforeArea)/beforeArea>.01){simplified=merged;afterArea=beforeArea}
+  const geometry=simplified.geometry;
+  const components=geometry.type==='Polygon'?[geometry.coordinates]:geometry.type==='MultiPolygon'?geometry.coordinates:[];
+  const next={type:'FeatureCollection',features:components.map(coordinates=>({type:'Feature',properties:{},geometry:{type:'Polygon',coordinates}}))};
+  if(!next.features.length)throw Error('Union did not produce editable polygons.');
+  downloadStudy('liminalcreek-before-join-backup.json');
+  state.polygons=next;saveState();renderPolygons();
+  info('setupStatus',original.length+' drawn shapes joined into '+next.features.length+' editable area(s); union area approximately '+(beforeArea/1e6).toFixed(2)+' km². Original backup downloaded. Existing location pairs have not been changed.');
+ }catch(err){info('setupStatus','Could not join areas: '+err.message+'. Your original polygons are unchanged.')}
+};
+$('export').onclick=()=>{downloadStudy('liminalcreek-prototype.json')};
 $('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){setLocationPreview(false);state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();$('viewLocations').disabled=!!state.studyInitialized;info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
 })();
