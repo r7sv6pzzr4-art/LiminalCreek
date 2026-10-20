@@ -87,7 +87,7 @@ begin
  -- study-local timezone if local-day limits are essential).
  select count(*) into cnt from public.responses
   where user_id=auth.uid() and recorded_at>=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC';
- if cnt>=3 then raise exception 'Daily limit reached'; end if;
+ if cnt>=10 then raise exception 'Daily limit reached'; end if;
  if p_valence not in ('good','bad','neutral','mixed') or coalesce(cardinality(p_descriptions),0)=0 then
   raise exception 'Invalid impression';
  end if;
