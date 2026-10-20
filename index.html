@@ -71,7 +71,7 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 <div class="panel"><label for="person">Prototype participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
 <label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="50">
 <label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
-<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
+<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button><button id="newProject" type="button">Start blank project</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
 <p class="small">Experimental controls: three responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
@@ -281,6 +281,15 @@ $('joinAreas').onclick=()=>{
  }catch(err){info('setupStatus','Could not join areas: '+err.message+'. Your original polygons are unchanged.')}
 };
 $('export').onclick=()=>{downloadStudy('liminalcreek-prototype.json')};
+$('newProject').onclick=()=>{
+ if(!confirm('Start a completely blank local prototype? This clears imported/drawn areas, locations and test impressions from this browser. A backup will be downloaded first.'))return;
+ downloadStudy('liminalcreek-before-reset-backup.json');
+ setLocationPreview(false);
+ state={polygons:{type:'FeatureCollection',features:[]},pairs:[],responses:[],queues:{A:[],B:[]},cursor:{A:0,B:0},person:'A'};
+ placePresented=false;saveState();renderPolygons();refresh();
+ $('viewLocations').disabled=false;
+ info('setupStatus','Blank project ready. Your previous project was downloaded as a JSON backup; import it to restore your areas.');
+};
 $('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){setLocationPreview(false);state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();$('viewLocations').disabled=!!state.studyInitialized;info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
 })();
