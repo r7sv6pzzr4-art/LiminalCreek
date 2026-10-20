@@ -2,10 +2,18 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#172f2a"><title>LiminalCreek</title><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
 <style>
 :root{font-family:system-ui,-apple-system,sans-serif;color:#e9ede5;background:#142b27}*{box-sizing:border-box}body{margin:0}header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#142b27}h1{font-family:Georgia,serif;font-size:1.55rem;letter-spacing:.035em;margin:0}small,.hint{color:#aabdb3}button,select,textarea,input{font:inherit}button{cursor:pointer;border:1px solid #789387;border-radius:11px;background:#24463c;color:white;padding:10px 13px}button:disabled{opacity:.4}button.active{background:#63836a;color:#fff}.tabs{display:flex;gap:5px;padding:0 12px 10px;overflow:auto}.tabs button{flex:1;white-space:nowrap;font-size:.88rem}.tabs button.selected{background:#b9c6a3;color:#11231d}#map{height:45dvh;min-height:270px;background:#20342c}main{max-width:850px;margin:auto;padding:14px 17px 80px}section{display:none}section.visible{display:block}h2{font-family:Georgia,serif;font-size:1.35rem;margin:8px 0 12px}p{line-height:1.5} .row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.row>button{flex:1;min-width:92px}.panel{background:#203b33;padding:15px;border:1px solid #3d5e50;border-radius:14px;margin:10px 0}label{display:block;margin:12px 0 6px}textarea,select,input[type=number]{width:100%;background:#10251e;border:1px solid #708f81;border-radius:9px;padding:10px;color:white}textarea{min-height:70px}#details button{margin:3px}#details button.chosen{background:#adc3a0;color:#14261e}.small{font-size:.85rem;color:#b8c6be}.error{color:#ffd2b8}.ok{color:#d5e9b9}.leaflet-container{font-family:system-ui,sans-serif}footer{font-size:.8rem;color:#afc0b4;margin-top:28px} 
+
+/* Immersive editing mode: Leaflet controls remain available and the map fills the screen. */
+#fullscreenToggle{position:absolute;z-index:750;top:12px;right:12px;background:#142b27eb;box-shadow:0 2px 10px #0005;padding:10px 14px}
+#map{position:relative}
+body.map-fullscreen{overflow:hidden}
+body.map-fullscreen #map{position:fixed;inset:0;width:100vw;height:100dvh;min-height:0;z-index:1100}
+body.map-fullscreen #fullscreenToggle{z-index:1200}
+body.map-fullscreen .leaflet-top.leaflet-right{top:56px}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
-<div id="map" role="application" aria-label="Map of Ramanessin Creek area"></div>
+<div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main>
 <section id="place" class="visible"><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
 <div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
@@ -39,6 +47,17 @@ const polygons=new L.FeatureGroup().addTo(map), dotLayer=L.layerGroup().addTo(ma
 function renderPolygons(){polygons.clearLayers();L.geoJSON(state.polygons,{style:{color:'#c8e3b4',weight:2,fillOpacity:.13},onEachFeature:(f,l)=>polygons.addLayer(l)});}
 function syncPolygons(){state.polygons=polygons.toGeoJSON();saveState();info('setupStatus',state.polygons.features.length+' eligible polygon(s) saved.');}
 renderPolygons();
+
+const fullscreenButton=$('fullscreenToggle');
+function setMapFullscreen(on){
+ document.body.classList.toggle('map-fullscreen',on);
+ fullscreenButton.textContent=on?'✕ Exit full map':'⛶ Full map';
+ fullscreenButton.setAttribute('aria-pressed',String(on));
+ fullscreenButton.title=on?'Return to normal layout':'Expand map to full screen';
+ setTimeout(()=>map.invalidateSize(),80);
+}
+fullscreenButton.addEventListener('click',()=>setMapFullscreen(!document.body.classList.contains('map-fullscreen')));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false)});
 const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon:{allowIntersection:false},rectangle:true,polyline:false,circle:false,circlemarker:false,marker:false}});
 map.on(L.Draw.Event.CREATED,e=>{polygons.addLayer(e.layer);syncPolygons()});map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
 function page(name){document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);setTimeout(()=>map.invalidateSize(),50);refresh();}
