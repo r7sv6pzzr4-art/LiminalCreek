@@ -54,8 +54,13 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 .leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:7px!important;height:7px!important;margin-left:-3.5px!important;margin-top:-3.5px!important;background:#90d9f5!important;border:1px solid #276d94!important;box-shadow:0 0 0 1px #e4f7ff;opacity:.9!important}
 .leaflet-draw-toolbar a.liminal-exclude-tool{display:block!important;width:30px!important;height:30px!important;background-color:#fff!important;color:transparent!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M5 7 L17 4 L22 13 L17 22 L5 18 Z' fill='none' stroke='%234a625c' stroke-width='1.7' stroke-linejoin='round'/%3E%3Cpath d='M4 22 L22 4' stroke='%23dc773d' stroke-width='2.7' stroke-linecap='round'/%3E%3C/svg%3E")!important;background-size:26px 26px!important;background-position:center!important;background-repeat:no-repeat!important;text-decoration:none}
 .leaflet-draw-toolbar a.liminal-exclude-tool:hover{background-color:#e6ebe5!important}
+#authPanel{margin:12px auto;max-width:850px;padding:12px 17px;background:#203b33;border:1px solid #3d5e50;border-radius:12px}
+#authPanel .auth-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#authPanel input{flex:1;min-width:180px;background:#10251e;border:1px solid #708f81;color:#fff;border-radius:8px;padding:10px}
+#authPanel p{margin:6px 0;font-size:.86rem;color:#b8c6be}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
+<details id="authPanel"><summary>Account login · <span id="authIdentity">Not signed in</span></summary><p>Sign in with your email to prepare for the shared study. Your current map and test impressions will remain local.</p><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Email me a sign-in link</button><button type="button" id="authSignOut" hidden>Sign out</button></div><p id="authStatus" aria-live="polite">Connecting…</p></details>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
@@ -76,6 +81,8 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="./sampling.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script defer src="./auth.js"></script>
 <script>
 (()=>{'use strict';
 const KEY='liminalcreek-v01', DAYMAX=10, FT=0.3048;
