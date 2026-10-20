@@ -64,7 +64,7 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
-<section id="place" class="visible"><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
+<section id="place" class="visible"><div class="row"><button id="modeToggle" type="button">Switch to shared study (secure)</button><button id="liveReload" type="button" hidden>Refresh assignment</button></div><p id="liveBanner" class="small" hidden></p><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
 <div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
 <div id="details"></div>
 <div id="strengthWrap" hidden><label for="strength">How strong is the impression?</label><select id="strength"><option value="">Choose strength</option><option value="1">1 — Faint</option><option value="2">2 — Moderate</option><option value="3">3 — Strong</option><option value="4">4 — Very strong</option></select></div>
@@ -199,10 +199,11 @@ function bbox(){const b=polygons.getBounds();return b.isValid()?[b.getWest(),b.g
 function randomEligible(b){for(let i=0;i<20000;i++){const x=b[0]+Math.random()*(b[2]-b[0]),y=b[1]+Math.random()*(b[3]-b[1]);if(eligible([x,y]))return [x,y]}return null}
 function offset(point,metres){const ang=Math.random()*Math.PI*2,d=metres*Math.sqrt(Math.random()),lat=point[1]+(d*Math.sin(ang))/111320,lng=point[0]+d*Math.cos(ang)/(111320*Math.cos(point[1]*Math.PI/180));return [lng,lat]}
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
+let liveMode=false,livePlace=null,liveStats=null,liveBusy=false;
 function usedToday(person){return state.responses.filter(r=>r.person===person&&r.date===today()).length}
-function loc(){return state.pairs[state.queues[state.person]?.[state.cursor[state.person]]] }
+function loc(){return liveMode?(livePlace?{id:livePlace.assignment_id,A:[livePlace.longitude,livePlace.latitude],B:[livePlace.longitude,livePlace.latitude]}:null):state.pairs[state.queues[state.person]?.[state.cursor[state.person]]]}
 // Start close in, allowing participants to zoom out voluntarily for context.
-function focusPlace(){const p=loc();if(!p||usedToday(state.person)>=DAYMAX)return;const [lng,lat]=p[state.person];map.setView([lat,lng],19)}
+function focusPlace(){const p=loc();if(!p||(liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;const [lng,lat]=liveMode?p.A:p[state.person];if(liveMode&&map.hasLayer(aerial2020)){map.removeLayer(aerial2020);aerial.addTo(map)}map.setView([lat,lng],19)}
 let currentV=null,chosen=[],placePresented=false,locationsVisible=false;
 function setLocationPreview(on){
  locationsVisible=!!on && !!state.pairs.length && !state.studyInitialized;
@@ -231,12 +232,74 @@ let gestureY=null;
 dockButton.addEventListener('touchstart',e=>{gestureY=e.touches[0].clientY},{passive:true});
 dockButton.addEventListener('touchend',e=>{if(gestureY===null)return;const diff=e.changedTouches[0].clientY-gestureY;gestureY=null;if(Math.abs(diff)>32){setDockCollapsed(diff>0);dockButton.dataset.swiped='yes';setTimeout(()=>delete dockButton.dataset.swiped,80)}},{passive:true});
 
-$('present').onclick=()=>{if(!loc()||usedToday(state.person)>=DAYMAX)return;placePresented=true;setDockCollapsed(false);resetForm();info('feedback','');refresh();focusPlace()};
+$('present').onclick=()=>{if(!loc()||(liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;if(liveMode&&liveBusy)return;placePresented=true;setDockCollapsed(false);resetForm();info('feedback','');refresh();focusPlace()};
 function resetForm(){currentV=null;chosen=[];document.querySelectorAll('[data-v]').forEach(b=>b.classList.remove('active'));$('details').replaceChildren();$('strengthWrap').hidden=true;$('strength').value='';$('note').value=''}
-function refresh(){info('identity',state.person==='A'?'Participant A':'Participant B');$('person').value=state.person;let n=usedToday(state.person),p=loc();$('question').hidden=!placePresented||!p||n>=DAYMAX;$('invitation').hidden=placePresented||!p||n>=DAYMAX;info('placeStatus',n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Consider the highlighted location. '+n+'/10 impressions recorded today.':'No pending locations. Draw eligible areas and generate the study in Setup.');dotLayer.clearLayers();if(p&&placePresented&&n<DAYMAX){const point=p[state.person];L.circleMarker([point[1],point[0]],{radius:12,color:'#e7ead2',weight:3,fillColor:'#688a69',fillOpacity:.35}).addTo(dotLayer)}info('stats',state.responses.filter(r=>r.person===state.person).length+' impressions recorded on this device. '+n+' of 10 today. No results displayed.')}
+function refresh(){
+ info('identity',liveMode?'Shared study':state.person==='A'?'Participant A':'Participant B');
+ $('person').value=state.person;
+ let n=liveMode?Number(liveStats?.completed_today||0):usedToday(state.person),p=loc();
+ $('question').hidden=!placePresented||!p||n>=DAYMAX;
+ $('invitation').hidden=placePresented||!p||n>=DAYMAX;
+ $('save').disabled=liveBusy;
+ $('modeToggle').textContent=liveMode?'Return to local prototype':'Switch to shared study (secure)';
+ $('liveReload').hidden=!liveMode;
+ $('liveBanner').hidden=!liveMode;
+ if(liveMode){
+  info('liveBanner',liveStats?.started?'Live study · Responses are stored securely and remain blinded.':'Shared study is not yet activated. The prototype is still available.');
+  info('placeStatus',!liveStats?'Sign in to load the study, then refresh assignments.':!liveStats.started?'Live collection is locked until the security checks are complete.':n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 recorded today.':'No more assigned places.');
+  info('stats',(liveStats?.completed||0)+' shared-study impressions recorded. '+n+' of 10 today. Contents remain hidden.');
+ }else{
+  info('placeStatus',n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 impressions recorded today.':'No pending locations. Draw eligible areas and generate the study in Setup.');
+  info('stats',state.responses.filter(r=>r.person===state.person).length+' impressions recorded on this device. '+n+' of 10 today. No results displayed.');
+ }
+ dotLayer.clearLayers();
+ if(p&&placePresented&&n<DAYMAX){const point=liveMode?p.A:p[state.person];L.circleMarker([point[1],point[0]],{radius:12,color:'#e7ead2',weight:3,fillColor:'#688a69',fillOpacity:.35}).addTo(dotLayer)}
+}
+async function loadLive(){
+ if(!liveMode)return;
+ placePresented=false;livePlace=null;liveStats=null;resetForm();refresh();
+ if(!window.liminalClient){info('feedback','Authentication has not loaded; refresh the page.');return}
+ liveBusy=true;refresh();
+ try{
+  const {data:{user},error:authError}=await window.liminalClient.auth.getUser();
+  if(authError||!user)throw Error('Sign in using Account login first.');
+  const {data,error}=await window.liminalClient.rpc('next_liminal_place');
+  if(error)throw error;
+  liveStats=(data||[])[0]||null;
+  if(liveStats?.started&&liveStats.assignment_id)livePlace=liveStats;
+  info('feedback',liveStats?.started?'Secure assignments loaded.':'Signed in. The shared study has not started; no responses can be submitted yet.');
+ }catch(e){info('feedback','Could not load shared study: '+e.message)}
+ finally{liveBusy=false;refresh()}
+}
+$('modeToggle').onclick=()=>{liveMode=!liveMode;placePresented=false;setDockCollapsed(false);resetForm();if(liveMode)loadLive();else{livePlace=null;liveStats=null;info('feedback','Local prototype restored. Test responses remain on this device.');refresh()}};
+$('liveReload').onclick=loadLive;
+window.addEventListener('liminal-auth',()=>{if(liveMode)loadLive()});
+
 document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{currentV=b.dataset.v;chosen=[];document.querySelectorAll('[data-v]').forEach(x=>x.classList.toggle('active',x===b));$('details').replaceChildren();let title=document.createElement('p');title.textContent='Choose one or more descriptions:';$('details').append(title);categories[currentV].forEach(c=>{let x=document.createElement('button');x.textContent=c;x.onclick=()=>{if(chosen.includes(c))chosen=chosen.filter(z=>z!==c);else chosen.push(c);x.classList.toggle('chosen',chosen.includes(c))};$('details').append(x)});$('strengthWrap').hidden=currentV==='neutral';});
 
-$('save').onclick=()=>{const p=loc(),v=currentV;if(!p||usedToday(state.person)>=DAYMAX)return;if(!v||!chosen.length||v!=='neutral'&&!$('strength').value){info('feedback','Please select an impression, a description, and strength when applicable.');return}state.responses.push({pairId:p.id,person:state.person,coordinate:p[state.person],valence:v,descriptions:[...chosen],strength:v==='neutral'?null:+$('strength').value,note:$('note').value.trim(),date:today(),time:new Date().toISOString(),sampling:'broad'});state.cursor[state.person]++;saveState();placePresented=false;setDockCollapsed(false);resetForm();info('feedback','Impression recorded. Choose “Present a place” when you are ready for another.');refresh()};
+$('save').onclick=async()=>{
+ const p=loc(),v=currentV;if(!p||liveBusy)return;
+ if((liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;
+ if(!v||!chosen.length||v!=='neutral'&&!$('strength').value){info('feedback','Please select an impression, a description, and strength when applicable.');return}
+ if(liveMode){
+  liveBusy=true;refresh();
+  try{
+   const {error}=await window.liminalClient.rpc('submit_impression',{
+    p_assignment_id:livePlace.assignment_id,p_valence:v,p_descriptions:[...chosen],
+    p_strength:v==='neutral'?null:+$('strength').value,p_note:$('note').value.trim()
+   });
+   if(error)throw error;
+   placePresented=false;resetForm();
+   await loadLive();
+   info('feedback','Secure impression recorded. It is hidden until the study is revealed.');
+  }catch(e){info('feedback','Not saved: '+e.message)}
+  finally{liveBusy=false;refresh()}
+  return;
+ }
+ state.responses.push({pairId:p.id,person:state.person,coordinate:p[state.person],valence:v,descriptions:[...chosen],strength:v==='neutral'?null:+$('strength').value,note:$('note').value.trim(),date:today(),time:new Date().toISOString(),sampling:'broad'});
+ state.cursor[state.person]++;saveState();placePresented=false;setDockCollapsed(false);resetForm();
+ info('feedback','Prototype impression recorded locally. Choose “Present a place” for another.');refresh();
+};
 $('skip').onclick=()=>{info('feedback','You can return to this place later. No impression recorded.')};
 $('person').onchange=e=>{state.person=e.target.value;placePresented=false;saveState();resetForm();refresh()};
 $('generate').onclick=()=>{
