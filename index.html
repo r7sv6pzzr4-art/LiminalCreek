@@ -12,23 +12,23 @@ body.map-fullscreen #fullscreenToggle{z-index:1200}
 body.map-fullscreen .leaflet-top.leaflet-right{top:56px}
 
 /* In observation mode the map is the canvas; the questionnaire is a sliding bottom dock. */
-body.place-mode{height:100dvh;overflow:hidden}
-body.place-mode #map{height:calc(100dvh - var(--top-height, 116px));min-height:0}
-body.place-mode main{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,850px);max-height:min(70dvh,650px);overflow-y:auto;overscroll-behavior:contain;z-index:850;background:#142b27f7;border:1px solid #536b5c;border-bottom:0;border-radius:18px 18px 0 0;box-shadow:0 -7px 26px #0005;padding:0 17px calc(14px + env(safe-area-inset-bottom));transition:max-height .22s ease;scrollbar-width:thin}
-body.place-mode main.dock-collapsed{max-height:54px;overflow:hidden}
-body.place-mode main footer{display:none}
+body.place-mode,body.setup-mode{height:100dvh;overflow:hidden}
+body.place-mode #map,body.setup-mode:not(.map-fullscreen) #map{height:calc(100dvh - var(--top-height, 116px));min-height:0}
+body.place-mode main,body.setup-mode main{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,850px);max-height:min(70dvh,650px);overflow-y:auto;overscroll-behavior:contain;z-index:850;background:#142b27f7;border:1px solid #536b5c;border-bottom:0;border-radius:18px 18px 0 0;box-shadow:0 -7px 26px #0005;padding:0 17px calc(14px + env(safe-area-inset-bottom));transition:max-height .22s ease;scrollbar-width:thin}
+body.place-mode main.dock-collapsed,body.setup-mode main.dock-collapsed{max-height:54px;overflow:hidden}
+body.place-mode main footer,body.setup-mode main footer{display:none}
 #dockHandle{display:none}
-body.place-mode #dockHandle{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;position:sticky;top:0;z-index:3;width:100%;min-height:50px;border:0;border-radius:0;background:#142b27;color:#bfcfc1;touch-action:pan-y;user-select:none;cursor:grab;font-size:.83rem}
+body.place-mode #dockHandle,body.setup-mode #dockHandle{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;position:sticky;top:0;z-index:3;width:100%;min-height:50px;border:0;border-radius:0;background:#142b27;color:#bfcfc1;touch-action:pan-y;user-select:none;cursor:grab;font-size:.83rem}
 #dockGrip{display:block;width:48px;height:5px;border-radius:99px;background:#98ac9e}
-body.place-mode main.dock-collapsed #dockHandle{cursor:pointer}
-body.place-mode #place{padding-bottom:12px}
-body.place-mode #fullscreenToggle{display:none}
-@media(min-width:851px){body.place-mode main{border-radius:18px 18px 0 0}}
+body.place-mode main.dock-collapsed #dockHandle,body.setup-mode main.dock-collapsed #dockHandle{cursor:pointer}
+body.place-mode #place,body.setup-mode #setup{padding-bottom:12px}
+body.place-mode #fullscreenToggle{display:none}body.setup-mode.map-fullscreen main{z-index:1200}
+@media(min-width:851px){body.place-mode main,body.setup-mode main{border-radius:18px 18px 0 0}}
 
 /* Attribution is required but need not sit at the foot of the page.
    Keep it visible above the collapsible questionnaire dock. */
 /* Quiet dark attribution, positioned directly above the minimized dock. */
-body.place-mode #map .leaflet-bottom.leaflet-right{
+body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet-bottom.leaflet-right{
   position:fixed;bottom:54px;top:auto;right:8px;z-index:840
 }
 #map .leaflet-control-attribution{
@@ -43,6 +43,10 @@ body.place-mode:has(main:not(.dock-collapsed)) #map .leaflet-control-attribution
 body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 #dockCredits a{color:#c8e4cb}
 
+/* Slightly brighten the streamed 2020 imagery without changing 2007 or OSM. */
+.leaflet-tile.aerial-2020{filter:brightness(1.16)}
+/* Prevent the standard hover-to-open layers behavior; JavaScript also blocks hover events below. */
+.leaflet-control-layers.liminal-click-layers:not(.leaflet-control-layers-expanded) .leaflet-control-layers-list{display:none}
 /* Small, precise editing vertices. */
 .leaflet-div-icon.leaflet-editing-icon{width:12px!important;height:12px!important;margin-left:-6px!important;margin-top:-6px!important;border-radius:50%;border:2px solid #fff!important;background:#d65a37!important;box-shadow:0 0 0 1px #73321e}
 /* Leaflet.draw uses opacity .6 for intermediate add-vertex handles. */
@@ -80,10 +84,18 @@ let state;try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){}state ||= {p
 const $=id=>document.getElementById(id), saveState=()=>localStorage.setItem(KEY,JSON.stringify(state)), info=(id,s)=>{$(id).textContent=s}, today=()=>new Date().toLocaleDateString('en-CA');
 const map=L.map('map',{zoomControl:true}).setView([40.333,-74.165],13);
 const aerial=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2007',{layers:'Natural2007',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2007 aerial imagery',maxZoom:20});
-const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2020 aerial imagery',maxZoom:20});
+const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2020 aerial imagery',maxZoom:20,className:'aerial-2020'});
 const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
 aerial.on('tileerror',()=>info('setupStatus','NJ aerial imagery failed to load; use OpenStreetMap layer while service configuration is checked.'));
-L.control.layers({'NJ 2007 aerial':aerial,'NJ 2020 aerial':aerial2020,'OpenStreetMap':osm},{}).addTo(map);
+L.control.layers({'NJ 2007 aerial':aerial,'NJ 2020 aerial':aerial2020,'OpenStreetMap':osm},{},{collapsed:true,hideSingleBase:false}).addTo(map);
+// Leaflet's default layer-control expansion is hover-driven; replace that with click-only.
+const layersToggle=document.querySelector('.leaflet-control-layers-toggle');
+if(layersToggle){const controlBox=layersToggle.closest('.leaflet-control-layers');controlBox?.classList.add('liminal-click-layers');
+ // Leaflet registers mouseover on the outer control. Stop it at capture phase;
+ // click continues to use Leaflet's own expand/collapse behavior.
+ controlBox?.addEventListener('mouseover',e=>e.stopImmediatePropagation(),true);
+ controlBox?.addEventListener('mouseout',e=>e.stopImmediatePropagation(),true);
+}
 aerial.addTo(map);osm.remove();
 map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':e.layer===aerial2020?'NJGIN 2020 imagery':'NJGIN 2007 imagery'});
 const polygons=new L.FeatureGroup().addTo(map), areaFill=L.geoJSON(null,{style:{color:'transparent',weight:0,fillColor:'#b7d6ae',fillOpacity:.23},interactive:false}).addTo(map), dotLayer=L.layerGroup().addTo(map), previewLayer=L.layerGroup().addTo(map);
@@ -171,7 +183,7 @@ map.on(L.Draw.Event.CREATED,e=>{
  polygons.addLayer(e.layer);syncPolygons();
 });
 map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
-function page(name){if(name!=='setup'&&exclusionDrawer)exclusionDrawer.disable();if(name!=='setup')setLocationPreview(false);if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
+function page(name){if(name!=='setup'&&exclusionDrawer)exclusionDrawer.disable();if(name!=='setup')setLocationPreview(false);if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.body.classList.toggle('setup-mode',name==='setup');dockButton.setAttribute('aria-label',name==='setup'?'Hide or show study setup':'Hide or show questionnaire');dockCaption.textContent=panel.classList.contains('dock-collapsed')?'Show '+(name==='setup'?'setup':'questions')+' ↑':'Hide '+(name==='setup'?'setup':'questions')+' ↓';document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function ringContains(point,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>point[1])!==(b[1]>point[1]))&&(point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside;}return inside;}
 function inGeometry(point,g){if(g.type==='Polygon')return g.coordinates.length>0&&ringContains(point,g.coordinates[0])&&!g.coordinates.slice(1).some(r=>ringContains(point,r));if(g.type==='MultiPolygon')return g.coordinates.some(p=>inGeometry(point,{type:'Polygon',coordinates:p}));return false;}
@@ -206,7 +218,7 @@ $('viewLocations').onclick=()=>{if(state.studyInitialized){info('setupStatus','L
 
 const panel=$('bottomPanel'),dockButton=$('dockHandle'),dockCaption=$('dockCaption');
 function updateMapHeight(){const tabs=document.querySelector('.tabs');document.body.style.setProperty('--top-height',(document.querySelector('header').offsetHeight+tabs.offsetHeight)+'px');setTimeout(()=>map.invalidateSize(),80)}
-function setDockCollapsed(collapsed){panel.classList.toggle('dock-collapsed',collapsed);dockButton.setAttribute('aria-expanded',String(!collapsed));dockCaption.textContent=collapsed?'Show questions ↑':'Hide questions ↓';setTimeout(()=>map.invalidateSize(),250)}
+function setDockCollapsed(collapsed){panel.classList.toggle('dock-collapsed',collapsed);dockButton.setAttribute('aria-expanded',String(!collapsed));const isSetup=document.body.classList.contains('setup-mode');dockCaption.textContent=collapsed?'Show '+(isSetup?'setup':'questions')+' ↑':'Hide '+(isSetup?'setup':'questions')+' ↓';setTimeout(()=>map.invalidateSize(),250)}
 dockButton.addEventListener('click',()=>{if(dockButton.dataset.swiped)return;setDockCollapsed(!panel.classList.contains('dock-collapsed'))});
 let gestureY=null;
 dockButton.addEventListener('touchstart',e=>{gestureY=e.touches[0].clientY},{passive:true});
