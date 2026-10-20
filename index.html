@@ -44,8 +44,12 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 #dockCredits a{color:#c8e4cb}
 
 /* Small, precise editing vertices. */
-.leaflet-editing-icon{width:8px!important;height:8px!important;margin-left:-4px!important;margin-top:-4px!important;border-radius:50%;border:1px solid #24463c!important;background:#e0edd0!important}
-#drawExclusion.active{background:#bd875f;color:#172b24}
+.leaflet-div-icon.leaflet-editing-icon{width:10px!important;height:10px!important;margin-left:-5px!important;margin-top:-5px!important;border-radius:50%;border:2px solid #fff!important;background:#d65a37!important;box-shadow:0 0 0 1px #73321e}
+/* Leaflet.draw uses opacity .6 for intermediate add-vertex handles. */
+.leaflet-div-icon.leaflet-editing-icon.leaflet-marker-draggable{opacity:1}
+.leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:7px!important;height:7px!important;margin-left:-3.5px!important;margin-top:-3.5px!important;background:#b9bba9!important;border:1px solid #587063!important;box-shadow:none;opacity:.55!important}
+.leaflet-draw-toolbar a.liminal-exclude-tool{background-image:none!important;background:#385249;color:#f0c6a1;text-align:center;font:bold 19px/26px system-ui,sans-serif;text-decoration:none}
+.leaflet-draw-toolbar a.liminal-exclude-tool:hover{background:#526b5a}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
@@ -63,7 +67,7 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 <div class="panel"><label for="person">Prototype participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
 <label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="50">
 <label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
-<div class="row"><button id="drawExclusion" type="button">− Draw exclusion</button><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
+<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
 <p class="small">Experimental controls: three responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
@@ -137,16 +141,33 @@ fullscreenButton.addEventListener('click',()=>setMapFullscreen(!document.body.cl
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false)});
 let drawingExclusion=false,exclusionDrawer=null;
 const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon:{allowIntersection:false},rectangle:true,polyline:false,circle:false,circlemarker:false,marker:false}});
-$('drawExclusion').onclick=()=>{
- if(exclusionDrawer){exclusionDrawer.disable();exclusionDrawer=null;drawingExclusion=false;$('drawExclusion').classList.remove('active');return}
- drawingExclusion=true;$('drawExclusion').classList.add('active');
- exclusionDrawer=new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#f2b480',weight:2,dashArray:'6 4',fillOpacity:0}});
- exclusionDrawer.enable();
+// Add a custom tool to the Leaflet drawing toolbar, alongside Polygon/Rectangle.
+const originalOnAdd=drawControl.onAdd.bind(drawControl);
+drawControl.onAdd=function(m){
+ const element=originalOnAdd(m);
+ const drawBar=element.querySelector('.leaflet-draw-toolbar-top');
+ if(drawBar){
+  const holder=document.createElement('div');holder.className='leaflet-draw-toolbar';
+  const link=document.createElement('a');link.href='#';link.className='liminal-exclude-tool';
+  link.textContent='−';link.title='Draw exclusion area';link.setAttribute('aria-label','Draw exclusion area');
+  holder.appendChild(link);drawBar.parentNode.insertBefore(holder,drawBar.nextSibling);
+  L.DomEvent.disableClickPropagation(holder);
+  L.DomEvent.on(link,'click',e=>{
+   L.DomEvent.stop(e);
+   if(exclusionDrawer){exclusionDrawer.disable();return}
+   drawingExclusion=true;
+   exclusionDrawer=new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#f2b480',weight:2,dashArray:'6 4',fillOpacity:0}});
+   exclusionDrawer.enable();
+  });
+ }
+ return element;
 };
-map.on(L.Draw.Event.DRAWSTOP,()=>{
- drawingExclusion=false;exclusionDrawer=null;$('drawExclusion').classList.remove('active');
+map.on(L.Draw.Event.DRAWSTOP,()=>{drawingExclusion=false;exclusionDrawer=null});
+map.on(L.Draw.Event.CREATED,e=>{
+ e.layer._liminalHole=drawingExclusion||e.layer.options?.color==='#f2b480';
+ polygons.addLayer(e.layer);syncPolygons();
 });
-map.on(L.Draw.Event.CREATED,e=>{e.layer._liminalHole=drawingExclusion||e.layer.options?.color==='#f2b480';polygons.addLayer(e.layer);syncPolygons()});map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
+map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
 function page(name){if(name!=='setup'&&exclusionDrawer)exclusionDrawer.disable();if(name!=='setup')setLocationPreview(false);if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function ringContains(point,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>point[1])!==(b[1]>point[1]))&&(point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside;}return inside;}
