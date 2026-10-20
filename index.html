@@ -27,14 +27,27 @@ body.place-mode #fullscreenToggle{display:none}
 
 /* Attribution is required but need not sit at the foot of the page.
    Keep it visible above the collapsible questionnaire dock. */
-body.place-mode #map .leaflet-bottom.leaflet-right{bottom:auto;top:102px}
-body.place-mode #map .leaflet-control-attribution{max-width:min(80vw,320px);font-size:10px;line-height:1.2;background:rgba(255,255,255,.86);padding:2px 5px}
+/* Quiet dark attribution, positioned directly above the minimized dock. */
+body.place-mode #map .leaflet-bottom.leaflet-right{
+  position:fixed;bottom:54px;top:auto;right:8px;z-index:840
+}
+#map .leaflet-control-attribution{
+  max-width:min(85vw,360px);font-size:10px;line-height:1.3;
+  color:#bdccbf;background:rgba(20,43,39,.89);
+  padding:4px 8px;border-radius:7px 7px 0 0;
+  box-shadow:0 1px 6px #0004
+}
+#map .leaflet-control-attribution a{color:#c8e4cb;text-decoration:underline;text-underline-offset:2px}
+body.place-mode:has(main:not(.dock-collapsed)) #map .leaflet-control-attribution{display:none}
+#dockCredits{display:none;color:#9fb5a7;font-size:10px;margin:4px 0 8px;text-align:right}
+body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
+#dockCredits a{color:#c8e4cb}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
-<section id="place" class="visible"><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
+<section id="place" class="visible"><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
 <div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
 <div id="details"></div>
 <div id="strengthWrap" hidden><label for="strength">How strong is the impression?</label><select id="strength"><option value="">Choose strength</option><option value="1">1 — Faint</option><option value="2">2 — Moderate</option><option value="3">3 — Strong</option><option value="4">4 — Very strong</option></select></div>
@@ -62,6 +75,7 @@ const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZ
 aerial.on('tileerror',()=>info('setupStatus','NJ aerial imagery failed to load; use OpenStreetMap layer while service configuration is checked.'));
 L.control.layers({'OpenStreetMap':osm,'NJ 2007 aerial (experimental)':aerial},{}).addTo(map);
 aerial.addTo(map);osm.remove();
+map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':'NJGIN 2007 imagery'});
 const polygons=new L.FeatureGroup().addTo(map), dotLayer=L.layerGroup().addTo(map);
 function renderPolygons(){polygons.clearLayers();L.geoJSON(state.polygons,{style:{color:'#c8e3b4',weight:2,fillOpacity:.13},onEachFeature:(f,l)=>polygons.addLayer(l)});}
 function syncPolygons(){state.polygons=polygons.toGeoJSON();saveState();info('setupStatus',state.polygons.features.length+' eligible polygon(s) saved.');}
