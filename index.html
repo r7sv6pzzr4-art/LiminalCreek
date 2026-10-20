@@ -24,6 +24,11 @@ body.place-mode main.dock-collapsed #dockHandle{cursor:pointer}
 body.place-mode #place{padding-bottom:12px}
 body.place-mode #fullscreenToggle{display:none}
 @media(min-width:851px){body.place-mode main{border-radius:18px 18px 0 0}}
+
+/* Attribution is required but need not sit at the foot of the page.
+   Keep it visible above the collapsible questionnaire dock. */
+body.place-mode #map .leaflet-bottom.leaflet-right{bottom:auto;top:102px}
+body.place-mode #map .leaflet-control-attribution{max-width:min(80vw,320px);font-size:10px;line-height:1.2;background:rgba(255,255,255,.86);padding:2px 5px}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
