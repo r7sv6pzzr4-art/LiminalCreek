@@ -59,7 +59,7 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 <div class="panel"><label for="person">Prototype participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
 <label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="50">
 <label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
-<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
+<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
 <p class="small">Experimental controls: three responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
@@ -78,8 +78,46 @@ L.control.layers({'OpenStreetMap':osm,'NJ 2007 aerial (experimental)':aerial},{}
 aerial.addTo(map);osm.remove();
 map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':'NJGIN 2007 imagery'});
 const polygons=new L.FeatureGroup().addTo(map), dotLayer=L.layerGroup().addTo(map), previewLayer=L.layerGroup().addTo(map);
-function renderPolygons(){polygons.clearLayers();L.geoJSON(state.polygons,{style:{color:'#c8e3b4',weight:2,fillOpacity:.13},onEachFeature:(f,l)=>polygons.addLayer(l)});}
-function syncPolygons(){state.polygons=polygons.toGeoJSON();saveState();info('setupStatus',state.polygons.features.length+' eligible polygon(s) saved.');}
+// Leaflet.draw cannot conveniently select the interior of polygon holes.
+// Represent exclusions as editable overlay rings and reconstruct the GeoJSON holes on save.
+function renderPolygons(){
+ polygons.clearLayers();
+ for(const f of (state.polygons.features||[])){
+  const components=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.type==='MultiPolygon'?f.geometry.coordinates:[];
+  for(const rings of components){
+   if(!rings.length)continue;
+   const outer=L.polygon(rings[0].map(c=>[c[1],c[0]]),{color:'#c8e3b4',weight:2,fillOpacity:.13});
+   outer._liminalHole=false;polygons.addLayer(outer);
+   for(const ring of rings.slice(1)){
+    const hole=L.polygon(ring.map(c=>[c[1],c[0]]),{color:'#f2b480',weight:2,dashArray:'6 4',fillColor:'#c67b50',fillOpacity:.25});
+    hole._liminalHole=true;hole.bindTooltip('Excluded area — use Edit to move vertices');polygons.addLayer(hole);
+   }
+  }
+ }
+}
+function syncPolygons(){
+ try{
+  const outers=[],holes=[];
+  polygons.eachLayer(layer=>{
+   const g=layer.toGeoJSON();
+   (layer._liminalHole?holes:outers).push(g);
+  });
+  if(!outers.length){state.polygons={type:'FeatureCollection',features:[]};saveState();return}
+  if(!window.turf)throw Error('Polygon geometry library unavailable');
+  let shape=outers[0];
+  for(const feature of outers.slice(1))shape=turf.union(shape,feature);
+  if(!shape)throw Error('Could not combine included areas');
+  for(const hole of holes){
+   const trimmed=turf.difference(shape,hole);
+   if(trimmed)shape=trimmed;
+  }
+  const components=shape.geometry.type==='Polygon'?[shape.geometry.coordinates]:shape.geometry.coordinates;
+  state.polygons={type:'FeatureCollection',features:components.map(coordinates=>({type:'Feature',properties:{},geometry:{type:'Polygon',coordinates}}))};
+  saveState();
+  renderPolygons();
+  info('setupStatus',state.polygons.features.length+' eligible area(s) saved, including '+holes.length+' editable exclusion(s).');
+ }catch(e){info('setupStatus','Area edit not saved: '+e.message+'. Reload or restore your exported backup if needed.')}
+}
 renderPolygons();
 
 const fullscreenButton=$('fullscreenToggle');
@@ -93,7 +131,7 @@ function setMapFullscreen(on){
 fullscreenButton.addEventListener('click',()=>setMapFullscreen(!document.body.classList.contains('map-fullscreen')));
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false)});
 const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon:{allowIntersection:false},rectangle:true,polyline:false,circle:false,circlemarker:false,marker:false}});
-map.on(L.Draw.Event.CREATED,e=>{polygons.addLayer(e.layer);syncPolygons()});map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
+map.on(L.Draw.Event.CREATED,e=>{e.layer._liminalHole=false;polygons.addLayer(e.layer);syncPolygons()});map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
 function page(name){if(name!=='setup')setLocationPreview(false);if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function ringContains(point,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>point[1])!==(b[1]>point[1]))&&(point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside;}return inside;}
