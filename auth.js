@@ -7,7 +7,9 @@ const $=id=>document.getElementById(id);
 const status=s=>{$('authStatus').textContent=s};
 if(!window.supabase?.createClient){status('Authentication library could not load. Refresh while online.');return;}
 const client=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+window.liminalClient=client;
 function render(session){
+ window.dispatchEvent(new CustomEvent('liminal-auth',{detail:{user:session?.user||null}}));
  const user=session?.user;
  $('authEmail').hidden=!!user;
  $('authSend').hidden=!!user;
