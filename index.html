@@ -57,9 +57,9 @@ body.place-mode main:not(.dock-collapsed) #dockCredits{display:block}
 <section id="progress"><h2>Progress</h2><div class="panel"><p id="stats">No entries yet.</p></div><p class="hint">Collected impressions remain hidden. This prototype saves only to this device; it is not yet the secure shared study.</p></section>
 <section id="setup"><h2>Study setup</h2><p>Use the polygon tool on the map to draw eligible territory. Overlaps are fine: all polygons form one combined sampling area. You can edit or delete shapes. Only eligible coverage matters, not individual polygon boundaries.</p>
 <div class="panel"><label for="person">Prototype participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
-<label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="100">
+<label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="50">
 <label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
-<div class="row"><button id="generate">Generate paired locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p></div>
+<div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
 <p class="small">Experimental controls: three responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
 <footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
@@ -77,7 +77,7 @@ aerial.on('tileerror',()=>info('setupStatus','NJ aerial imagery failed to load; 
 L.control.layers({'OpenStreetMap':osm,'NJ 2007 aerial (experimental)':aerial},{}).addTo(map);
 aerial.addTo(map);osm.remove();
 map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':'NJGIN 2007 imagery'});
-const polygons=new L.FeatureGroup().addTo(map), dotLayer=L.layerGroup().addTo(map);
+const polygons=new L.FeatureGroup().addTo(map), dotLayer=L.layerGroup().addTo(map), previewLayer=L.layerGroup().addTo(map);
 function renderPolygons(){polygons.clearLayers();L.geoJSON(state.polygons,{style:{color:'#c8e3b4',weight:2,fillOpacity:.13},onEachFeature:(f,l)=>polygons.addLayer(l)});}
 function syncPolygons(){state.polygons=polygons.toGeoJSON();saveState();info('setupStatus',state.polygons.features.length+' eligible polygon(s) saved.');}
 renderPolygons();
@@ -94,7 +94,7 @@ fullscreenButton.addEventListener('click',()=>setMapFullscreen(!document.body.cl
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false)});
 const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon:{allowIntersection:false},rectangle:true,polyline:false,circle:false,circlemarker:false,marker:false}});
 map.on(L.Draw.Event.CREATED,e=>{polygons.addLayer(e.layer);syncPolygons()});map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
-function page(name){if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
+function page(name){if(name!=='setup')setLocationPreview(false);if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function ringContains(point,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>point[1])!==(b[1]>point[1]))&&(point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside;}return inside;}
 function inGeometry(point,g){if(g.type==='Polygon')return g.coordinates.length>0&&ringContains(point,g.coordinates[0])&&!g.coordinates.slice(1).some(r=>ringContains(point,r));if(g.type==='MultiPolygon')return g.coordinates.some(p=>inGeometry(point,{type:'Polygon',coordinates:p}));return false;}
@@ -107,7 +107,26 @@ function usedToday(person){return state.responses.filter(r=>r.person===person&&r
 function loc(){return state.pairs[state.queues[state.person]?.[state.cursor[state.person]]] }
 // Start close in, allowing participants to zoom out voluntarily for context.
 function focusPlace(){const p=loc();if(!p||usedToday(state.person)>=DAYMAX)return;const [lng,lat]=p[state.person];map.setView([lat,lng],19)}
-let currentV=null,chosen=[],placePresented=false;
+let currentV=null,chosen=[],placePresented=false,locationsVisible=false;
+function setLocationPreview(on){
+ locationsVisible=!!on && !!state.pairs.length && !state.studyInitialized;
+ previewLayer.clearLayers();
+ $('viewLocations').textContent=locationsVisible?'Hide locations':'View locations';
+ $('viewLocations').setAttribute('aria-pressed',String(locationsVisible));
+ $('locationPreviewInfo').hidden=!locationsVisible;
+ if(!locationsVisible)return;
+ const bounds=[];
+ for(const pair of state.pairs){
+  const a=[pair.A[1],pair.A[0]],b=[pair.B[1],pair.B[0]];
+  L.polyline([a,b],{color:'#e9d39a',weight:1,opacity:.65,interactive:false}).addTo(previewLayer);
+  L.circleMarker(a,{radius:4,color:'#c8edd8',fillColor:'#4d9b79',fillOpacity:1,weight:1,interactive:false}).addTo(previewLayer);
+  L.circleMarker(b,{radius:4,color:'#ffe0c7',fillColor:'#c97953',fillOpacity:1,weight:1,interactive:false}).addTo(previewLayer);
+  bounds.push(a,b);
+ }
+ if(bounds.length)map.fitBounds(bounds,{padding:[25,25],maxZoom:15});
+}
+$('viewLocations').onclick=()=>{if(state.studyInitialized){info('setupStatus','Location previews are unavailable once the real study has been initialized.');return}if(!state.pairs.length){info('setupStatus','Generate locations first to preview the paired sample.');return}setLocationPreview(!locationsVisible)};
+
 const panel=$('bottomPanel'),dockButton=$('dockHandle'),dockCaption=$('dockCaption');
 function updateMapHeight(){const tabs=document.querySelector('.tabs');document.body.style.setProperty('--top-height',(document.querySelector('header').offsetHeight+tabs.offsetHeight)+'px');setTimeout(()=>map.invalidateSize(),80)}
 function setDockCollapsed(collapsed){panel.classList.toggle('dock-collapsed',collapsed);dockButton.setAttribute('aria-expanded',String(!collapsed));dockCaption.textContent=collapsed?'Show questions ↑':'Hide questions ↓';setTimeout(()=>map.invalidateSize(),250)}
@@ -130,13 +149,13 @@ $('generate').onclick=()=>{
  if(state.responses.length&&!confirm('Regenerating removes existing prototype responses. Continue?'))return;
  try{
   const generated=LiminalSampling.generate({count,bounds:b,eligible,maxSeparationMeters:max,report:x=>info('setupStatus','Selected '+x.selected+' spatially balanced pairs from '+x.candidateCount+' candidate sites.')});
-  state.pairs=generated;state.responses=[];
+  setLocationPreview(false);state.pairs=generated;state.responses=[];
   state.queues={A:shuffle(generated.map((_,i)=>i)),B:shuffle(generated.map((_,i)=>i))};
   state.cursor={A:0,B:0};placePresented=false;saveState();page('place');
  }catch(err){info('setupStatus',err.message)}
 };
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminalcreek-prototype.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-$('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
+$('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){setLocationPreview(false);state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();$('viewLocations').disabled=!!state.studyInitialized;info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
 })();
 </script></body></html>
