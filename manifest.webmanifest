@@ -1,0 +1,16 @@
+{
+  "name": "LiminalCreek",
+  "short_name": "LiminalCreek",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#142b27",
+  "theme_color": "#142b27",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
