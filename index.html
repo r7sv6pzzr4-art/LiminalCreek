@@ -10,11 +10,25 @@ body.map-fullscreen{overflow:hidden}
 body.map-fullscreen #map{position:fixed;inset:0;width:100vw;height:100dvh;min-height:0;z-index:1100}
 body.map-fullscreen #fullscreenToggle{z-index:1200}
 body.map-fullscreen .leaflet-top.leaflet-right{top:56px}
+
+/* In observation mode the map is the canvas; the questionnaire is a sliding bottom dock. */
+body.place-mode{height:100dvh;overflow:hidden}
+body.place-mode #map{height:calc(100dvh - var(--top-height, 116px));min-height:0}
+body.place-mode main{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,850px);max-height:min(70dvh,650px);overflow-y:auto;overscroll-behavior:contain;z-index:850;background:#142b27f7;border:1px solid #536b5c;border-bottom:0;border-radius:18px 18px 0 0;box-shadow:0 -7px 26px #0005;padding:0 17px calc(14px + env(safe-area-inset-bottom));transition:max-height .22s ease;scrollbar-width:thin}
+body.place-mode main.dock-collapsed{max-height:54px;overflow:hidden}
+body.place-mode main footer{display:none}
+#dockHandle{display:none}
+body.place-mode #dockHandle{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;position:sticky;top:0;z-index:3;width:100%;min-height:50px;border:0;border-radius:0;background:#142b27;color:#bfcfc1;touch-action:pan-y;user-select:none;cursor:grab;font-size:.83rem}
+#dockGrip{display:block;width:48px;height:5px;border-radius:99px;background:#98ac9e}
+body.place-mode main.dock-collapsed #dockHandle{cursor:pointer}
+body.place-mode #place{padding-bottom:12px}
+body.place-mode #fullscreenToggle{display:none}
+@media(min-width:851px){body.place-mode main{border-radius:18px 18px 0 0}}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
-<main>
+<main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
 <section id="place" class="visible"><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
 <div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
 <div id="details"></div>
@@ -60,7 +74,7 @@ fullscreenButton.addEventListener('click',()=>setMapFullscreen(!document.body.cl
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false)});
 const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon:{allowIntersection:false},rectangle:true,polyline:false,circle:false,circlemarker:false,marker:false}});
 map.on(L.Draw.Event.CREATED,e=>{polygons.addLayer(e.layer);syncPolygons()});map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
-function page(name){document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},50);refresh();}
+function page(name){if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup')map.addControl(drawControl);else map.removeControl(drawControl);updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
 function ringContains(point,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>point[1])!==(b[1]>point[1]))&&(point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside;}return inside;}
 function inGeometry(point,g){if(g.type==='Polygon')return g.coordinates.length>0&&ringContains(point,g.coordinates[0])&&!g.coordinates.slice(1).some(r=>ringContains(point,r));if(g.type==='MultiPolygon')return g.coordinates.some(p=>inGeometry(point,{type:'Polygon',coordinates:p}));return false;}
@@ -74,17 +88,25 @@ function loc(){return state.pairs[state.queues[state.person]?.[state.cursor[stat
 // Start close in, allowing participants to zoom out voluntarily for context.
 function focusPlace(){const p=loc();if(!p||usedToday(state.person)>=DAYMAX)return;const [lng,lat]=p[state.person];map.setView([lat,lng],19)}
 let currentV=null,chosen=[],placePresented=false;
-$('present').onclick=()=>{if(!loc()||usedToday(state.person)>=DAYMAX)return;placePresented=true;resetForm();info('feedback','');refresh();focusPlace()};
+const panel=$('bottomPanel'),dockButton=$('dockHandle'),dockCaption=$('dockCaption');
+function updateMapHeight(){const tabs=document.querySelector('.tabs');document.body.style.setProperty('--top-height',(document.querySelector('header').offsetHeight+tabs.offsetHeight)+'px');setTimeout(()=>map.invalidateSize(),80)}
+function setDockCollapsed(collapsed){panel.classList.toggle('dock-collapsed',collapsed);dockButton.setAttribute('aria-expanded',String(!collapsed));dockCaption.textContent=collapsed?'Show questions ↑':'Hide questions ↓';setTimeout(()=>map.invalidateSize(),250)}
+dockButton.addEventListener('click',()=>{if(dockButton.dataset.swiped)return;setDockCollapsed(!panel.classList.contains('dock-collapsed'))});
+let gestureY=null;
+dockButton.addEventListener('touchstart',e=>{gestureY=e.touches[0].clientY},{passive:true});
+dockButton.addEventListener('touchend',e=>{if(gestureY===null)return;const diff=e.changedTouches[0].clientY-gestureY;gestureY=null;if(Math.abs(diff)>32){setDockCollapsed(diff>0);dockButton.dataset.swiped='yes';setTimeout(()=>delete dockButton.dataset.swiped,80)}},{passive:true});
+
+$('present').onclick=()=>{if(!loc()||usedToday(state.person)>=DAYMAX)return;placePresented=true;setDockCollapsed(false);resetForm();info('feedback','');refresh();focusPlace()};
 function resetForm(){currentV=null;chosen=[];document.querySelectorAll('[data-v]').forEach(b=>b.classList.remove('active'));$('details').replaceChildren();$('strengthWrap').hidden=true;$('strength').value='';$('note').value=''}
 function refresh(){info('identity',state.person==='A'?'Participant A':'Participant B');$('person').value=state.person;let n=usedToday(state.person),p=loc();$('question').hidden=!placePresented||!p||n>=DAYMAX;$('invitation').hidden=placePresented||!p||n>=DAYMAX;info('placeStatus',n>=DAYMAX?'Daily limit reached (3/3). Return tomorrow.':p?'Consider the highlighted location. '+n+'/3 impressions recorded today.':'No pending locations. Draw eligible areas and generate the study in Setup.');dotLayer.clearLayers();if(p&&placePresented&&n<DAYMAX){const point=p[state.person];L.circleMarker([point[1],point[0]],{radius:12,color:'#e7ead2',weight:3,fillColor:'#688a69',fillOpacity:.35}).addTo(dotLayer)}info('stats',state.responses.filter(r=>r.person===state.person).length+' impressions recorded on this device. '+n+' of 3 today. No results displayed.')}
 document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{currentV=b.dataset.v;chosen=[];document.querySelectorAll('[data-v]').forEach(x=>x.classList.toggle('active',x===b));$('details').replaceChildren();let title=document.createElement('p');title.textContent='Choose one or more descriptions:';$('details').append(title);categories[currentV].forEach(c=>{let x=document.createElement('button');x.textContent=c;x.onclick=()=>{if(chosen.includes(c))chosen=chosen.filter(z=>z!==c);else chosen.push(c);x.classList.toggle('chosen',chosen.includes(c))};$('details').append(x)});$('strengthWrap').hidden=currentV==='neutral';});
 
-$('save').onclick=()=>{const p=loc(),v=currentV;if(!p||usedToday(state.person)>=DAYMAX)return;if(!v||!chosen.length||v!=='neutral'&&!$('strength').value){info('feedback','Please select an impression, a description, and strength when applicable.');return}state.responses.push({pairId:p.id,person:state.person,coordinate:p[state.person],valence:v,descriptions:[...chosen],strength:v==='neutral'?null:+$('strength').value,note:$('note').value.trim(),date:today(),time:new Date().toISOString(),sampling:'broad'});state.cursor[state.person]++;saveState();placePresented=false;resetForm();info('feedback','Impression recorded. Choose “Present a place” when you are ready for another.');refresh()};
+$('save').onclick=()=>{const p=loc(),v=currentV;if(!p||usedToday(state.person)>=DAYMAX)return;if(!v||!chosen.length||v!=='neutral'&&!$('strength').value){info('feedback','Please select an impression, a description, and strength when applicable.');return}state.responses.push({pairId:p.id,person:state.person,coordinate:p[state.person],valence:v,descriptions:[...chosen],strength:v==='neutral'?null:+$('strength').value,note:$('note').value.trim(),date:today(),time:new Date().toISOString(),sampling:'broad'});state.cursor[state.person]++;saveState();placePresented=false;setDockCollapsed(false);resetForm();info('feedback','Impression recorded. Choose “Present a place” when you are ready for another.');refresh()};
 $('skip').onclick=()=>{info('feedback','You can return to this place later. No impression recorded.')};
 $('person').onchange=e=>{state.person=e.target.value;placePresented=false;saveState();resetForm();refresh()};
 $('generate').onclick=()=>{const b=bbox(),count=Math.max(2,Math.min(2000,+$('pairs').value||100)),max=Math.max(0,Math.min(1000,+$('separation').value||0))*FT;if(!b){info('setupStatus','Draw at least one eligible polygon first.');return}if(state.responses.length&&!confirm('Regenerating removes existing prototype responses. Continue?'))return;let generated=[];for(let i=0;i<count;i++){let center=randomEligible(b);if(!center)break;let a=center,other=null;for(let j=0;j<500;j++){let candidate=offset(a,max);if(eligible(candidate)){other=candidate;break}}if(other)generated.push({id:i+1,A:a,B:other})}if(!generated.length){info('setupStatus','Could not find paired locations. Expand the eligible area or reduce max offset.');return}state.pairs=generated;state.responses=[];state.queues={A:shuffle(generated.map((_,i)=>i)),B:shuffle(generated.map((_,i)=>i))};state.cursor={A:0,B:0};placePresented=false;saveState();info('setupStatus',generated.length+' pairs generated; independently shuffled for both participants.');page('place')};
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminalcreek-prototype.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 $('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});refresh();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
 })();
 </script></body></html>
