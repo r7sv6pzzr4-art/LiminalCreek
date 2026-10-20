@@ -17,7 +17,7 @@ function render(session){
 }
 $('authSend').addEventListener('click',async()=>{
  const email=$('authEmail').value.trim();
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){status('Enter a valid email address.');return;}
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){status('Enter a valid email address.');return;}
  $('authSend').disabled=true;status('Requesting sign-in email…');
  try{
   const {error}=await client.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
