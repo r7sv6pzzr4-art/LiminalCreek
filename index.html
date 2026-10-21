@@ -361,6 +361,6 @@ $('newProject').onclick=()=>{
  info('setupStatus','Blank project ready. Your previous project was downloaded as a JSON backup; import it to restore your areas.');
 };
 $('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){setLocationPreview(false);state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();$('viewLocations').disabled=!!state.studyInitialized;info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');map.removeLayer(polygons);map.removeLayer(areaFill);$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
 })();
 </script></body></html>
