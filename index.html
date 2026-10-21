@@ -22,6 +22,8 @@ body.place-mode #dockHandle,body.setup-mode #dockHandle{display:flex;align-items
 #dockGrip{display:block;width:48px;height:5px;border-radius:99px;background:#98ac9e}
 body.place-mode main.dock-collapsed #dockHandle,body.setup-mode main.dock-collapsed #dockHandle{cursor:pointer}
 body.place-mode #place,body.setup-mode #setup{padding-bottom:12px}
+[hidden]{display:none!important}
+#liveReload{font-size:.78rem;padding:6px 10px;margin:0 0 8px auto;display:block;opacity:.75}
 body.place-mode #fullscreenToggle{display:none}body.setup-mode.map-fullscreen main{z-index:1200}
 @media(min-width:851px){body.place-mode main,body.setup-mode main{border-radius:18px 18px 0 0}}
 
@@ -61,24 +63,24 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
 <details id="authPanel"><summary>Account login · <span id="authIdentity">Not signed in</span></summary><p>Sign in with your email to prepare for the shared study. Your current map and test impressions will remain local.</p><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Email me a sign-in link</button><button type="button" id="authSignOut" hidden>Sign out</button></div><p id="authStatus" aria-live="polite">Connecting…</p></details>
-<nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup">Study setup</button></nav>
+<nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup" id="prototypeSetupTab" hidden>Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
-<section id="place" class="visible"><div class="row"><button id="modeToggle" type="button">Switch to shared study (secure)</button><button id="liveReload" type="button" hidden>Refresh assignment</button></div><p id="liveBanner" class="small" hidden></p><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
+<section id="place" class="visible"><div class="row" id="prototypeTools" hidden><button id="modeToggle" type="button">Return to study</button></div><button id="liveReload" type="button" hidden>Refresh assignment</button><p id="liveBanner" class="small" hidden></p><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
 <div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
 <div id="details"></div>
 <div id="strengthWrap" hidden><label for="strength">How strong is the impression?</label><select id="strength"><option value="">Choose strength</option><option value="1">1 — Faint</option><option value="2">2 — Moderate</option><option value="3">3 — Strong</option><option value="4">4 — Very strong</option></select></div>
 <label for="note">Anything else? (optional)</label><textarea id="note" placeholder="A few words, if you wish…"></textarea>
 <div class="row"><button id="save">Record impression</button><button id="skip">Skip for now</button></div></div>
 <p id="feedback" aria-live="polite"></p></section>
-<section id="progress"><h2>Progress</h2><div class="panel"><p id="stats">No entries yet.</p></div><p class="hint">Collected impressions remain hidden. This prototype saves only to this device; it is not yet the secure shared study.</p></section>
+<section id="progress"><h2>Progress</h2><div class="panel"><p id="stats">No entries yet.</p></div><p class="hint">Your recorded impressions remain hidden until the study is complete.</p></section>
 <section id="setup"><h2>Study setup</h2><p>Use the polygon tool on the map to draw eligible territory. Overlaps are fine: all polygons form one combined sampling area. You can edit or delete shapes. Only eligible coverage matters, not individual polygon boundaries.</p>
 <div class="panel"><label for="person">Prototype participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
 <label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="100">
 <label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
 <div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button><button id="newProject" type="button">Start blank project</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
-<p class="small">Experimental controls: ten responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. No push notifications or real authentication yet.</p></section>
-<footer>Prototype v0.1 · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
+<p class="small">Experimental controls: ten responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. This local editing workspace is separate from the active study and does not change live assignments.</p></section>
+<footer>LiminalCreek · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="./sampling.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -199,7 +201,8 @@ function bbox(){const b=polygons.getBounds();return b.isValid()?[b.getWest(),b.g
 function randomEligible(b){for(let i=0;i<20000;i++){const x=b[0]+Math.random()*(b[2]-b[0]),y=b[1]+Math.random()*(b[3]-b[1]);if(eligible([x,y]))return [x,y]}return null}
 function offset(point,metres){const ang=Math.random()*Math.PI*2,d=metres*Math.sqrt(Math.random()),lat=point[1]+(d*Math.sin(ang))/111320,lng=point[0]+d*Math.cos(ang)/(111320*Math.cos(point[1]*Math.PI/180));return [lng,lat]}
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
-let liveMode=false,livePlace=null,liveStats=null,liveBusy=false;
+const prototypeAccess=new URLSearchParams(location.search).get('prototype')==='1';
+let liveMode=!prototypeAccess,livePlace=null,liveStats=null,liveBusy=false;
 function usedToday(person){return state.responses.filter(r=>r.person===person&&r.date===today()).length}
 function loc(){return liveMode?(livePlace?{id:livePlace.assignment_id,A:[livePlace.longitude,livePlace.latitude],B:[livePlace.longitude,livePlace.latitude]}:null):state.pairs[state.queues[state.person]?.[state.cursor[state.person]]]}
 // Start close in, allowing participants to zoom out voluntarily for context.
@@ -225,7 +228,7 @@ function setLocationPreview(on){
 $('viewLocations').onclick=()=>{if(state.studyInitialized){info('setupStatus','Location previews are unavailable once the real study has been initialized.');return}if(!state.pairs.length){info('setupStatus','Generate locations first to preview the paired sample.');return}setLocationPreview(!locationsVisible)};
 
 const panel=$('bottomPanel'),dockButton=$('dockHandle'),dockCaption=$('dockCaption');
-function updateMapHeight(){const tabs=document.querySelector('.tabs');document.body.style.setProperty('--top-height',(document.querySelector('header').offsetHeight+tabs.offsetHeight)+'px');setTimeout(()=>map.invalidateSize(),80)}
+function updateMapHeight(){const tabs=document.querySelector('.tabs');document.body.style.setProperty('--top-height',(document.querySelector('header').offsetHeight+document.querySelector('#authPanel').offsetHeight+tabs.offsetHeight)+'px');setTimeout(()=>map.invalidateSize(),80)}
 function setDockCollapsed(collapsed){panel.classList.toggle('dock-collapsed',collapsed);dockButton.setAttribute('aria-expanded',String(!collapsed));const isSetup=document.body.classList.contains('setup-mode');dockCaption.textContent=collapsed?'Show '+(isSetup?'setup':'questions')+' ↑':'Hide '+(isSetup?'setup':'questions')+' ↓';setTimeout(()=>map.invalidateSize(),250)}
 dockButton.addEventListener('click',()=>{if(dockButton.dataset.swiped)return;setDockCollapsed(!panel.classList.contains('dock-collapsed'))});
 let gestureY=null;
@@ -241,12 +244,14 @@ function refresh(){
  $('question').hidden=!placePresented||!p||n>=DAYMAX;
  $('invitation').hidden=placePresented||!p||n>=DAYMAX;
  $('save').disabled=liveBusy;$('present').disabled=liveMode&&(!liveStats?.started||!livePlace||n>=DAYMAX||liveBusy);
- $('modeToggle').textContent=liveMode?'Return to local prototype':'Switch to shared study (secure)';
- $('liveReload').hidden=!liveMode;
+ $('prototypeTools').hidden=!prototypeAccess;
+ $('prototypeSetupTab').hidden=!prototypeAccess;
+ $('modeToggle').textContent=liveMode?'Open local test workspace':'Return to study';
+ $('liveReload').hidden=!liveMode || !liveStats?.started;
  $('liveBanner').hidden=!liveMode;
  if(liveMode){
-  info('liveBanner',liveStats?.started?'Live study · Responses are stored securely and remain blinded.':'Shared study is not yet activated. The prototype is still available.');
-  info('placeStatus',!liveStats?'Sign in to load the study, then refresh assignments.':!liveStats.started?'Live collection is locked until the security checks are complete.':n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 recorded today.':'No more assigned places.');
+  info('liveBanner',liveStats?.started?'Observations are private and remain hidden until the study is complete.':'The study is not yet available.');
+  info('placeStatus',!liveStats?'Sign in to load the study, then refresh assignments.':!liveStats.started?'The study has not started yet.':n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 recorded today.':'No more assigned places.');
   info('stats',(liveStats?.completed||0)+' shared-study impressions recorded. '+n+' of 10 today. Contents remain hidden.');
  }else{
   info('placeStatus',n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 impressions recorded today.':'No pending locations. Draw eligible areas and generate the study in Setup.');
@@ -267,11 +272,11 @@ async function loadLive(){
   if(error)throw error;
   liveStats=(data||[])[0]||null;
   if(liveStats?.started&&liveStats.assignment_id)livePlace=liveStats;
-  info('feedback',liveStats?.started?'Secure assignments loaded.':'Signed in. The shared study has not started; no responses can be submitted yet.');
+  info('feedback',liveStats?.started?'':'The study has not started yet.');
  }catch(e){info('feedback','Could not load shared study: '+e.message)}
  finally{liveBusy=false;refresh()}
 }
-$('modeToggle').onclick=()=>{liveMode=!liveMode;placePresented=false;setDockCollapsed(false);resetForm();if(liveMode)loadLive();else{livePlace=null;liveStats=null;info('feedback','Local prototype restored. Test responses remain on this device.');refresh()}};
+$('modeToggle').onclick=()=>{if(!prototypeAccess)return;liveMode=!liveMode;placePresented=false;setDockCollapsed(false);resetForm();if(liveMode)loadLive();else{livePlace=null;liveStats=null;info('feedback','Local prototype restored. Test responses remain on this device.');refresh()}};
 $('liveReload').onclick=loadLive;
 window.addEventListener('liminal-auth',()=>{if(liveMode)loadLive()});
 
@@ -361,6 +366,6 @@ $('newProject').onclick=()=>{
  info('setupStatus','Blank project ready. Your previous project was downloaded as a JSON backup; import it to restore your areas.');
 };
 $('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){setLocationPreview(false);state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();$('viewLocations').disabled=!!state.studyInitialized;info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');map.removeLayer(polygons);map.removeLayer(areaFill);$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});document.body.classList.add('place-mode');map.removeLayer(polygons);map.removeLayer(areaFill);$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();if(liveMode){if(window.liminalClient)loadLive();else window.addEventListener('liminal-auth',()=>loadLive(),{once:true})}
 })();
 </script></body></html>
