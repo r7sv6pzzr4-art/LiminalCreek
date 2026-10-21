@@ -240,7 +240,7 @@ function refresh(){
  let n=liveMode?Number(liveStats?.completed_today||0):usedToday(state.person),p=loc();
  $('question').hidden=!placePresented||!p||n>=DAYMAX;
  $('invitation').hidden=placePresented||!p||n>=DAYMAX;
- $('save').disabled=liveBusy;
+ $('save').disabled=liveBusy;$('present').disabled=liveMode&&(!liveStats?.started||!livePlace||n>=DAYMAX||liveBusy);
  $('modeToggle').textContent=liveMode?'Return to local prototype':'Switch to shared study (secure)';
  $('liveReload').hidden=!liveMode;
  $('liveBanner').hidden=!liveMode;
