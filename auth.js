@@ -14,8 +14,9 @@ function render(session){
  $('authEmail').hidden=!!user;
  $('authSend').hidden=!!user;
  $('authSignOut').hidden=!user;
+ $('authCodeRow').hidden=!!user;
  $('authIdentity').textContent=user?'Signed in: '+user.email:'Not signed in';
- status(user?'Account connected. The shared study is not initialized; impressions still stay on this device.':'Enter your email to receive a sign-in link.');
+ status(user?'Account connected. The shared study is not initialized; impressions still stay on this device.':'Enter your email for a sign-in link. You can also enter a code if your email contains one.');
 }
 $('authSend').addEventListener('click',async()=>{
  const email=$('authEmail').value.trim();
@@ -23,9 +24,21 @@ $('authSend').addEventListener('click',async()=>{
  $('authSend').disabled=true;status('Requesting sign-in email…');
  try{
   const {error}=await client.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
-  status(error?'Could not send sign-in email: '+error.message:'Check your inbox for a sign-in link. If you do not see it, check spam.');
+  status(error?'Could not send sign-in email: '+error.message:'Check your inbox for a sign-in link or code (if enabled in the email template). Check spam if needed.');
  }catch(e){status('Sign-in request failed: '+e.message)}
  finally{$('authSend').disabled=false}
+});
+$('authVerify').addEventListener('click',async()=>{
+ const email=$('authEmail').value.trim(),token=$('authCode').value.trim();
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){status('Enter the same email address you requested the sign-in email for.');return;}
+ if(!/^\\d{6}$/.test(token)){status('Enter the six-digit code from your sign-in email.');return;}
+ $('authVerify').disabled=true;status('Verifying code…');
+ try{
+  const {error}=await client.auth.verifyOtp({email,token,type:'email'});
+  if(error)status('Code not accepted: '+error.message);
+  else {$('authCode').value='';status('Signed in successfully.');}
+ }catch(e){status('Code verification failed: '+e.message)}
+ finally{$('authVerify').disabled=false}
 });
 $('authSignOut').addEventListener('click',async()=>{const {error}=await client.auth.signOut();if(error)status(error.message)});
 client.auth.onAuthStateChange((_event,session)=>render(session));
