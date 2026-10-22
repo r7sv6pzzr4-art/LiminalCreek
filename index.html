@@ -31,10 +31,10 @@ body.place-mode #fullscreenToggle{display:none}body.setup-mode.map-fullscreen ma
    Keep it visible above the collapsible questionnaire dock. */
 /* Quiet dark attribution, positioned directly above the minimized dock. */
 body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet-bottom.leaflet-right{
-  position:fixed;bottom:0;top:auto;right:0;z-index:1300
+  position:fixed;bottom:54px;top:auto;right:auto;left:0;z-index:1300
 }
 #map .leaflet-control-attribution{
-  max-width:min(85vw,360px);font-size:10px;line-height:1.3;
+  max-width:min(48vw,360px);font-size:10px;line-height:1.3;
   color:#bdccbf;background:rgba(20,43,39,.89);
   padding:4px 8px;border-radius:7px 7px 0 0;
   box-shadow:0 1px 6px #0004
@@ -45,6 +45,7 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 /* Attribution stays on the map edge; avoid duplicating it inside the dock. */
 #dockCredits a{color:#c8e4cb}
 
+#imageryCredit{display:none;position:fixed;right:0;bottom:54px;z-index:1300;font-size:10px;line-height:1.3;color:#bdccbf;background:rgba(20,43,39,.89);padding:4px 8px;border-radius:7px 7px 0 0;box-shadow:0 1px 6px #0004;pointer-events:none}body.place-mode #imageryCredit,body.setup-mode #imageryCredit{display:block}
 /* Slightly brighten the streamed 2020 imagery without changing 2007 or OSM. */
 .leaflet-tile.aerial-2020{filter:brightness(1.16)}
 /* Prevent the standard hover-to-open layers behavior; JavaScript also blocks hover events below. */
@@ -73,7 +74,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 </script>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup" id="prototypeSetupTab" hidden>Study setup</button></nav>
-<div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
+<div id="map" role="application" aria-label="Map of Ramanessin Creek area"><span id="imageryCredit">2007 aerial imagery</span><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
 <section id="place" class="visible"><div class="row" id="prototypeTools" hidden><button id="modeToggle" type="button">Return to study</button></div><button id="liveReload" type="button" hidden>Refresh assignment</button><p id="liveBanner" class="small" hidden></p><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
 <div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
@@ -101,8 +102,8 @@ const categories={good:['Associated with good memories','Feels imprinted with hu
 let state;try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){}state ||= {polygons:{type:'FeatureCollection',features:[]},pairs:[],responses:[],queues:{A:[],B:[]},cursor:{A:0,B:0},person:'A'};
 const $=id=>document.getElementById(id), saveState=()=>localStorage.setItem(KEY,JSON.stringify(state)), info=(id,s)=>{$(id).textContent=s}, today=()=>new Date().toLocaleDateString('en-CA');
 const map=L.map('map',{zoomControl:true}).setView([40.333,-74.165],13);
-const aerial=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2007',{layers:'Natural2007',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2007 aerial imagery',maxZoom:20});
-const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'NJGIN 2020 aerial imagery',maxZoom:20,className:'aerial-2020'});
+const aerial=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2007',{layers:'Natural2007',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'<a href="https://njgin.nj.gov/" target="_blank" rel="noopener">NJGIN</a>',maxZoom:20});
+const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'<a href="https://njgin.nj.gov/" target="_blank" rel="noopener">NJGIN</a>',maxZoom:20,className:'aerial-2020'});
 const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
 aerial.on('tileerror',()=>info('setupStatus','NJ aerial imagery failed to load; use OpenStreetMap layer while service configuration is checked.'));
 L.control.layers({'NJ 2007 aerial':aerial,'NJ 2020 aerial':aerial2020,'OpenStreetMap':osm},{},{collapsed:true,hideSingleBase:false}).addTo(map);
@@ -115,7 +116,7 @@ if(layersToggle){const controlBox=layersToggle.closest('.leaflet-control-layers'
  controlBox?.addEventListener('mouseout',e=>e.stopImmediatePropagation(),true);
 }
 aerial.addTo(map);osm.remove();
-map.on('baselayerchange',e=>{$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':e.layer===aerial2020?'NJGIN 2020 imagery':'NJGIN 2007 imagery'});
+map.on('baselayerchange',e=>{$('imageryCredit').textContent=e.layer===osm?'OpenStreetMap':e.layer===aerial2020?'2020 aerial imagery':'2007 aerial imagery';$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':e.layer===aerial2020?'NJGIN 2020 imagery':'NJGIN 2007 imagery'});
 const polygons=new L.FeatureGroup().addTo(map), areaFill=L.geoJSON(null,{style:{color:'transparent',weight:0,fillColor:'#b7d6ae',fillOpacity:.23},interactive:false}).addTo(map), dotLayer=L.layerGroup().addTo(map), previewLayer=L.layerGroup().addTo(map);
 // Leaflet.draw cannot conveniently select the interior of polygon holes.
 // Represent exclusions as editable overlay rings and reconstruct the GeoJSON holes on save.
