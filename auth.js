@@ -37,10 +37,10 @@ $('authUseLink').addEventListener('click',async()=>{
  const normalized=raw.replace(/&amp;/gi,'&').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
  let u=null;
  // Try the whole pasted URL first. Only extract from surrounding text if necessary.
- try{u=new URL(normalized)}catch(e){}
+ try{u=new globalThis.URL(normalized)}catch(e){}
  if(!u){
   const match=normalized.match(/https?:\/\/[^\s<>"']+/i);
-  if(match){try{u=new URL(match[0].replace(/[).,;]+$/,''))}catch(e){}}
+  if(match){try{u=new globalThis.URL(match[0].replace(/[).,;]+$/,''))}catch(e){}}
  }
  if(!u){
   status('Unable to read the copied URL. Please check whether Mail copied the whole link. (Characters copied: '+raw.length+'; begins with https: '+/^https:/i.test(raw)+').');
