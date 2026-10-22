@@ -14,9 +14,10 @@ function render(session){
  $('authEmail').hidden=!!user;
  $('authSend').hidden=!!user;
  $('authSignOut').hidden=!user;
- $('authCodeRow').hidden=!!user;
+ $('authLinkRow').hidden=!!user;
+ $('authLinkHelp').hidden=!!user;
  $('authIdentity').textContent=user?'Signed in: '+user.email:'Not signed in';
- status(user?'Account connected. The shared study is not initialized; impressions still stay on this device.':'Enter your email for a sign-in link. You can also enter a code if your email contains one.');
+ status(user?'Account connected. The shared study is not initialized; impressions still stay on this device.':'You can open the email link in Safari, or copy and paste it below to sign in inside this Home Screen app.');
 }
 $('authSend').addEventListener('click',async()=>{
  const email=$('authEmail').value.trim();
@@ -24,21 +25,30 @@ $('authSend').addEventListener('click',async()=>{
  $('authSend').disabled=true;status('Requesting sign-in email…');
  try{
   const {error}=await client.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
-  status(error?'Could not send sign-in email: '+error.message:'Check your inbox for a sign-in link or code (if enabled in the email template). Check spam if needed.');
+  status(error?'Could not send sign-in email: '+error.message:'Check your inbox for a sign-in link. For Home Screen use, copy the link instead of opening it, then paste below.');
  }catch(e){status('Sign-in request failed: '+e.message)}
  finally{$('authSend').disabled=false}
 });
-$('authVerify').addEventListener('click',async()=>{
- const email=$('authEmail').value.trim(),token=$('authCode').value.trim();
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){status('Enter the same email address you requested the sign-in email for.');return;}
- if(!/^\d{6}$/.test(token)){status('Enter the six-digit code from your sign-in email.');return;}
- $('authVerify').disabled=true;status('Verifying code…');
+$('authUseLink').addEventListener('click',async()=>{
+ const raw=$('authPasteLink').value.trim();
+ if(!raw){status('Paste your sign-in link from the email first.');return;}
+ let u;try{u=new URL(raw)}catch(e){status('That does not look like a valid URL. Copy the sign-in link from your email.');return;}
+ // Only accept the project’s own Supabase verification links. Never run arbitrary pasted URLs.
+ if(u.protocol!=='https:'||u.origin!==URL||u.pathname!=='/auth/v1/verify'){
+  status('Please paste the original Supabase sign-in link from the email, not a page URL or a link you already opened.');return;
+ }
+ const token_hash=u.searchParams.get('token')||u.searchParams.get('token_hash');
+ const type=u.searchParams.get('type');
+ if(!token_hash||!['magiclink','email'].includes(type)){
+  status('This does not contain a usable email sign-in token. Request a new link and copy it directly from the email.');return;
+ }
+ $('authUseLink').disabled=true;status('Verifying your email link inside LiminalCreek…');
  try{
-  const {error}=await client.auth.verifyOtp({email,token,type:'email'});
-  if(error)status('Code not accepted: '+error.message);
-  else {$('authCode').value='';status('Signed in successfully.');}
- }catch(e){status('Code verification failed: '+e.message)}
- finally{$('authVerify').disabled=false}
+  const {error}=await client.auth.verifyOtp({token_hash,type});
+  if(error)status('Link could not be verified: '+error.message+'. Request a fresh sign-in email if needed.');
+  else {$('authPasteLink').value='';status('Signed in to this app successfully.');}
+ }catch(e){status('Sign-in verification failed: '+e.message)}
+ finally{$('authUseLink').disabled=false}
 });
 $('authSignOut').addEventListener('click',async()=>{const {error}=await client.auth.signOut();if(error)status(error.message)});
 client.auth.onAuthStateChange((_event,session)=>render(session));
