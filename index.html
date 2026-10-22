@@ -62,7 +62,7 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 #authPanel p{margin:6px 0;font-size:.86rem;color:#b8c6be}
 </style></head><body>
 <header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
-<details id="authPanel"><summary>Account · <span id="authIdentity">Not signed in</span></summary><p>Sign in to continue your LiminalCreek observations.</p><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Email me a sign-in link</button><button type="button" id="authSignOut" hidden>Sign out</button></div><p id="authStatus" aria-live="polite">Connecting…</p></details>
+<details id="authPanel"><summary>Account · <span id="authIdentity">Not signed in</span></summary><p>Sign in to continue your LiminalCreek observations.</p><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Email me a sign-in link or code</button><button type="button" id="authSignOut" hidden>Sign out</button></div><div class="auth-row" id="authCodeRow"><input id="authCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit email code" aria-label="Six-digit sign-in code"><button type="button" id="authVerify">Verify code</button></div><p id="authStatus" aria-live="polite">Connecting…</p></details>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup" id="prototypeSetupTab" hidden>Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
@@ -235,7 +235,7 @@ let gestureY=null;
 dockButton.addEventListener('touchstart',e=>{gestureY=e.touches[0].clientY},{passive:true});
 dockButton.addEventListener('touchend',e=>{if(gestureY===null)return;const diff=e.changedTouches[0].clientY-gestureY;gestureY=null;if(Math.abs(diff)>32){setDockCollapsed(diff>0);dockButton.dataset.swiped='yes';setTimeout(()=>delete dockButton.dataset.swiped,80)}},{passive:true});
 
-$('present').onclick=()=>{if(!loc()||(liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;if(liveMode&&liveBusy)return;placePresented=true;setDockCollapsed(false);resetForm();info('feedback','');refresh();focusPlace()};
+$('present').onclick=()=>{if(!loc()||(liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;if(liveMode&&liveBusy)return;placePresented=true;setDockCollapsed(true);resetForm();info('feedback','');refresh();focusPlace()};
 function resetForm(){currentV=null;chosen=[];document.querySelectorAll('[data-v]').forEach(b=>b.classList.remove('active'));$('details').replaceChildren();$('strengthWrap').hidden=true;$('strength').value='';$('note').value=''}
 function refresh(){
  info('identity',liveMode?'Shared study':state.person==='A'?'Participant A':'Participant B');
