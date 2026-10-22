@@ -34,13 +34,16 @@ $('authUseLink').addEventListener('click',async()=>{
  if(!raw){status('Paste your sign-in link from the email first.');return;}
  // Some mail clients paste a link surrounded by prose, quotes or angle brackets.
  // Never display or log the secret URL.
- const normalized=raw.replace(/&amp;/gi,'&');
- const match=normalized.match(/https?:\/\/[^\s<>"']+/i);
- let u;
- if(match){try{u=new URL(match[0].replace(/[).,;]+$/,''))}catch(e){}}
+ const normalized=raw.replace(/&amp;/gi,'&').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
+ let u=null;
+ // Try the whole pasted URL first. Only extract from surrounding text if necessary.
+ try{u=new URL(normalized)}catch(e){}
  if(!u){
-  const looksLikeUrl=/https?:\/\//i.test(raw);
-  status(looksLikeUrl?'The copied text contains an incomplete or malformed URL. In Mail, press and hold the actual sign-in button and choose Copy Link.':'It looks like Mail copied the button text, not its URL. Press and hold the sign-in button in the email, then choose Copy Link.');
+  const match=normalized.match(/https?:\/\/[^\s<>"']+/i);
+  if(match){try{u=new URL(match[0].replace(/[).,;]+$/,''))}catch(e){}}
+ }
+ if(!u){
+  status('Unable to read the copied URL. Please check whether Mail copied the whole link. (Characters copied: '+raw.length+'; begins with https: '+/^https:/i.test(raw)+').');
   return;
  }
  // Only accept the project’s own Supabase verification links. Never run arbitrary pasted URLs.
