@@ -31,7 +31,7 @@ body.place-mode #fullscreenToggle{display:none}body.setup-mode.map-fullscreen ma
    Keep it visible above the collapsible questionnaire dock. */
 /* Quiet dark attribution, positioned directly above the minimized dock. */
 body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet-bottom.leaflet-right{
-  position:fixed;bottom:54px;top:auto;right:auto;left:0;z-index:1300
+  position:fixed;bottom:0;top:auto;right:auto;left:0;z-index:1300
 }
 #map .leaflet-control-attribution{
   max-width:min(48vw,360px);font-size:10px;line-height:1.3;
@@ -45,7 +45,7 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 /* Attribution stays on the map edge; avoid duplicating it inside the dock. */
 #dockCredits a{color:#c8e4cb}
 
-#imageryCredit{display:none;position:fixed;right:0;bottom:54px;z-index:1300;font-size:10px;line-height:1.3;color:#bdccbf;background:rgba(20,43,39,.89);padding:4px 8px;border-radius:7px 7px 0 0;box-shadow:0 1px 6px #0004;pointer-events:none}body.place-mode #imageryCredit,body.setup-mode #imageryCredit{display:block}
+#imageryCredit{display:none;position:fixed;right:0;bottom:0;z-index:1300;font-size:10px;line-height:1.3;color:#bdccbf;background:rgba(20,43,39,.89);padding:4px 8px;border-radius:7px 7px 0 0;box-shadow:0 1px 6px #0004;pointer-events:none}body.place-mode #imageryCredit,body.setup-mode #imageryCredit{display:block}
 /* Slightly brighten the streamed 2020 imagery without changing 2007 or OSM. */
 .leaflet-tile.aerial-2020{filter:brightness(1.16)}
 /* Prevent the standard hover-to-open layers behavior; JavaScript also blocks hover events below. */
