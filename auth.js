@@ -30,8 +30,8 @@ $('authSend').addEventListener('click',async()=>{
 });
 $('authVerify').addEventListener('click',async()=>{
  const email=$('authEmail').value.trim(),token=$('authCode').value.trim();
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){status('Enter the same email address you requested the sign-in email for.');return;}
- if(!/^\\d{6}$/.test(token)){status('Enter the six-digit code from your sign-in email.');return;}
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){status('Enter the same email address you requested the sign-in email for.');return;}
+ if(!/^\d{6}$/.test(token)){status('Enter the six-digit code from your sign-in email.');return;}
  $('authVerify').disabled=true;status('Verifying code…');
  try{
   const {error}=await client.auth.verifyOtp({email,token,type:'email'});
