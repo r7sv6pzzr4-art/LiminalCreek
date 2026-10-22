@@ -34,12 +34,12 @@ $('authUseLink').addEventListener('click',async()=>{
  if(!raw){status('Paste your sign-in link from the email first.');return;}
  // Some mail clients paste a link surrounded by prose, quotes or angle brackets.
  // Never display or log the secret URL.
- const normalized=raw.replace(/&amp;/gi,'&').replace(/\\u0026/gi,'&');
- const match=normalized.match(/https?:\\/\\/[^\\s<>"']+/i);
+ const normalized=raw.replace(/&amp;/gi,'&');
+ const match=normalized.match(/https?:\/\/[^\s<>"']+/i);
  let u;
  if(match){try{u=new URL(match[0].replace(/[).,;]+$/,''))}catch(e){}}
  if(!u){
-  const looksLikeUrl=/https?:\\/\\//i.test(raw);
+  const looksLikeUrl=/https?:\/\//i.test(raw);
   status(looksLikeUrl?'The copied text contains an incomplete or malformed URL. In Mail, press and hold the actual sign-in button and choose Copy Link.':'It looks like Mail copied the button text, not its URL. Press and hold the sign-in button in the email, then choose Copy Link.');
   return;
  }
@@ -62,5 +62,6 @@ $('authUseLink').addEventListener('click',async()=>{
 });
 $('authSignOut').addEventListener('click',async()=>{const {error}=await client.auth.signOut();if(error)status(error.message)});
 client.auth.onAuthStateChange((_event,session)=>render(session));
-client.auth.getSession().then(({data,error})=>error?status(error.message):render(data.session)).catch(e=>status(e.message));
+client.auth.getSession().then(({data,error})=>error?status('Session check failed: '+error.message):render(data.session)).catch(e=>status('Session check failed: '+e.message));
+setTimeout(()=>{if($('authStatus').textContent==='Connecting…')status('Login is taking longer than expected. Try the sign-in link button; if it remains stuck, open LiminalCreek in Safari and reload.');},8000);
 })();
