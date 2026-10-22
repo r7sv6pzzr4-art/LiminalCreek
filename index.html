@@ -60,9 +60,18 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 #authPanel .auth-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 #authPanel input{flex:1;min-width:180px;background:#10251e;border:1px solid #708f81;color:#fff;border-radius:8px;padding:10px}
 #authPanel p{margin:6px 0;font-size:.86rem;color:#b8c6be}
+header .header-account{display:flex;flex-direction:column;align-items:flex-end;gap:3px}#accountButton{font-size:.78rem;padding:2px 0;background:none;border:0;color:#b7c8b9;text-decoration:underline;text-underline-offset:3px}#authPanel{display:none}#authPanel[open]{display:block;position:fixed;top:90px;left:10px;right:10px;max-width:850px;max-height:70dvh;overflow:auto;z-index:1600;box-shadow:0 8px 32px #0009}#authPanel>summary{display:none}@media(min-width:870px){#authPanel[open]{left:calc(50% - 425px);right:auto;width:850px}}
 </style></head><body>
-<header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><span id="identity" class="small"></span></header>
+<header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><div class="header-account"><span id="identity" class="small"></span><button type="button" id="accountButton" aria-controls="authPanel" aria-expanded="false">Account</button></div></header>
 <details id="authPanel"><summary>Account · <span id="authIdentity">Not signed in</span></summary><p>Sign in to continue your LiminalCreek observations.</p><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Email me a sign-in link</button><button type="button" id="authSignOut" hidden>Sign out</button></div><div class="auth-row" id="authLinkRow"><input id="authPasteLink" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the sign-in link from your email" aria-label="Paste sign-in email link"><button type="button" id="authUseLink">Sign in with pasted link</button></div><p id="authLinkHelp">For the Home Screen app: request an email, then <strong>copy</strong> its sign-in link (do not open it). Return here, paste it, and tap Sign in. The link can be used only once.</p><p id="authStatus" aria-live="polite">Connecting…</p></details>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+ const btn=document.getElementById('accountButton'),panel=document.getElementById('authPanel'),label=document.getElementById('authIdentity');
+ btn.addEventListener('click',()=>{panel.open=!panel.open;btn.setAttribute('aria-expanded',String(panel.open))});
+ const refresh=()=>{btn.textContent=label.textContent.startsWith('Signed in:')?'Account':'Account (Logged out)'};
+ new MutationObserver(refresh).observe(label,{childList:true,characterData:true,subtree:true});refresh();
+});
+</script>
 <nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup" id="prototypeSetupTab" hidden>Study setup</button></nav>
 <div id="map" role="application" aria-label="Map of Ramanessin Creek area"><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
 <main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
