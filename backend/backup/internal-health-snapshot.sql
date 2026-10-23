@@ -1,3 +1,5 @@
+SET TIME ZONE 'UTC';
+SET extra_float_digits = 3;
 -- Internal, read-only backup verification query.
 -- Executed only in the production DB and in a disposable local recovery DB.
 -- Output includes only aggregate counts and row digests, never response text.
