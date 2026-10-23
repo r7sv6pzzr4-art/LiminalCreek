@@ -1,102 +1,134 @@
-# LiminalCreek: encrypted daily backups (setup required)
+# LiminalCreek daily backup and study-data health checks
 
-This workflow has **no ability to change the live database**; it executes
-`pg_dump` to export the `public` schema to an encrypted artifact. No
-raw data is committed, logged, or uploaded. **Do not store an encryption
-private key in GitHub or in the LiminalCreek repository.**
+**Current status: proposal only until a separate private backup repository is created.**
+This branch makes NO changes to the live database, current assignment queues,
+GitHub Pages app, or hidden responses. The separate adaptive-sampling PR stays
+unmerged. Nothing in this branch silently reveals results.
 
-## Configure encryption on your Mac (once)
+## Why a private backup repository?
 
-Install age if needed:
+The LiminalCreek GitHub Pages repository is PUBLIC. Artifacts on a public
+GitHub repository should not hold unencrypted study data. Instead, use a
+SECOND, **PRIVATE** repository to run the backup and store the resulting
+artifacts. This requires no custom encryption key to manage or potentially
+lose. GitHub protects the private repository with account access controls.
+The backup files remain standard PostgreSQL custom-format archives.
 
-```sh
-brew install age
-mkdir -p "$HOME/.config/liminalcreek"
-chmod 700 "$HOME/.config/liminalcreek"
-age-keygen -o "$HOME/.config/liminalcreek/backup-identity.txt"
-chmod 600 "$HOME/.config/liminalcreek/backup-identity.txt"
-age-keygen -y "$HOME/.config/liminalcreek/backup-identity.txt"
-```
+No data gets committed to either repository; it is only held as a PRIVATE
+GitHub Actions artifact (30-day retention).
 
-The final command prints a **public recipient** beginning with `age1`.
-Only this public recipient goes into GitHub. Keep the entire private
-`backup-identity.txt` offline in at least one more secure place (an
-encrypted backup or password manager attachment). **If that private key
-is lost, none of the encrypted backups can be recovered.**
+## Step 1: Inspect current database health without reading answers
 
-## Configure exactly two GitHub Actions secrets
+In Supabase Dashboard -> SQL Editor, paste the contents of
+backend/backup/check-study-readonly.sql, then click Run.
 
-In your repository: **Settings → Secrets and variables → Actions →
-New repository secret**.
+The read-only report displays:
+- the number of studies and participant memberships;
+- 200 original assignment rows / 100 correctly paired sites (as expected
+  for this study);
+- how many responses were saved;
+- how many responses have nonempty feeling descriptions;
+- how many have optional free-text notes and the total number of note
+  characters (NOT the note text);
+- the timestamp of the most recent saved response;
+- whether basic integrity checks passed.
 
-1. `LIMINAL_BACKUP_AGE_RECIPIENT` — paste the `age1...` *public*
-   recipient from the command above.
-2. `LIMINAL_BACKUP_DATABASE_URL` — paste the **Session pooler**
-   connection string from Supabase → your project → **Connect →
-   Session pooler**, with `[YOUR-PASSWORD]` replaced by the *database*
-   password and any special password characters URL-encoded. Prefer
-   `?sslmode=require` in the URL. This is a **secret**: never post it in
-   chat, an issue, or a file. Do not use the anon/publishable API key.
+No exact coordinates, categories, comments, names or participant IDs are
+displayed. Note that **0 nonempty comments is not an error** if neither
+participant has written a comment; the optional note field can be blank.
+To check that a specific nonempty note was saved, the detailed backup
+fingerprint and restore check below compare each response row, including
+all text, without printing it.
 
-Session pooler on port 5432 is suitable for GitHub's IPv4-only runner.
-Do not use the transaction pooler at port 6543.
+## Step 2: Create a private backup repository (one-time)
 
-## Enable and run
+On GitHub:
+1. Select **New repository**.
+2. Name it something like **LiminalCreek-Backups**.
+3. **Choose Private**, not Public.
+4. No need to invite the second participant.
+5. Add the workflow file at
+   **.github/workflows/daily-study-backup.yml**, copying the contents of
+   backend/backup/private-repo-workflow.yml from the PUBLIC code repository.
+   The job explicitly refuses to run if its repository is not private.
 
-This workflow is added first on a **separate branch** and will not
-run on a daily schedule until merged into `main`.
+The private workflow reads the *audited scripts* from this public code
+repository's main branch. Thus first merge the backup-related PR only,
+**not** the unrelated adaptive-sampling PR. Do not activate the workflow
+on the public repository: the public repository carries no scheduled
+unencrypted backup job.
 
-After the two secrets are configured and the workflow has been reviewed,
-merge the dedicated backup PR to `main` (not the separate adaptive PR).
-Then go to **Actions → Encrypted daily study backup → Run workflow** and
-choose `main` to perform a first on-demand backup.
+## Step 3: Configure ONE GitHub Actions secret in the PRIVATE repository
 
-Only after the first run succeeds and an independent recovery test passes
-should the automated backups be relied upon.
+In the PRIVATE backup repository -> Settings -> Secrets and variables
+-> Actions -> New repository secret:
 
-Daily schedule is 12:23 UTC; GitHub may delay scheduled runs.
-Encrypted artifacts are kept for **30 days**, not indefinitely. Arrange
-occasional downloads to a second secure location for long-term retention.
+Name: LIMINAL_BACKUP_DATABASE_URL
 
-## Confirm without viewing blinded responses
+Value: Supabase -> Project -> Connect -> **Session pooler** connection
+string with the database password substituted. Use TLS (append
+?sslmode=require if absent). Percent-encode reserved characters in
+the password if required by the connection URL.
 
-Every run:
-- verifies that the database export is not empty;
-- checks that PostgreSQL can parse the archive;
-- confirms that `studies`, `participants`, `assignments`, and
-  `responses` table *and data sections* are present;
-- encrypts before upload and verifies the encrypted file has a checksum.
+Do not copy the connection string into GitHub files, issues or chat,
+or into the public repository's secrets. It must be placed only
+in the PRIVATE repository Actions secret. A separate least-privilege
+database backup role can be added later; initially this uses whichever
+database account you supplied. GitHub-hosted runners normally use IPv4;
+Supabase session pooler (port 5432) is suitable.
 
-The workflow prints no counts, coordinates, feeling selections, or notes.
+## Step 4: Test one backup before depending on it
 
-Download the two encrypted artifact files from the successful run and
-on the Mac run:
+Private backup repository -> Actions -> Daily LiminalCreek backup
+(private) -> Run workflow.
 
-```sh
-shasum -a 256 -c study-public.dump.age.sha256
-age -d -i "$HOME/.config/liminalcreek/backup-identity.txt" \
-  -o /tmp/liminal-study-restore-test.dump study-public.dump.age
-# Test archive readability without exposing any individual observations:
-pg_restore --list /tmp/liminal-study-restore-test.dump >/dev/null
-rm -f /tmp/liminal-study-restore-test.dump
-```
+The workflow:
+1. Takes aggregate fingerprints of the four core tables.
+2. Creates a consistent PostgreSQL custom-format archive of public schema.
+3. Takes fingerprints again to detect concurrent changes.
+4. Restores all four study data tables (studies, participants, assignments
+   and responses) into a DISPOSABLE PostgreSQL container.
+5. Compares row counts and every field, including **the exact comment text
+   and feeling selections**, using aggregate digests internally.
+6. Uploads the full archive and checksum to PRIVATE Actions artifacts
+   with 30-day retention. Logs display PASS/FAIL only, no response data.
 
-An actual **test restore into a separate disposable PostgreSQL
-database** is still needed to verify that all rows and policies can be
-reconstructed. The production database must never be a restore target.
+If new responses arrive *during* the backup, the rigorous row-for-row
+comparison will be INCONCLUSIVE and the job will fail safely rather than
+pretend the contents matched. Rerun during a quiet period.
 
-## Recovery scope / limitations
+The archive includes the public schema, so any later public study tables
+will also be exported. However, the disposable verification test currently
+checks the original four core tables; update the test as new tables matter.
 
-This backs up the entire `public` schema (which includes the study,
-assignment and response tables). It does **not** back up Supabase's
-platform-managed `auth` schema, OAuth/email authentication identities,
-Storage files, service configuration or private app secrets. Restoring
-a fully functional Supabase project may require additional steps to
-recreate auth users and preserve their UUIDs, or a supported full-project
-backup. We must test that separately before claiming full-project recovery.
+## Step 5: Keep at least one independent copy
 
-GitHub Actions artifacts are a convenient off-site encrypted copy, not
-a permanent archive. GitHub has access to the database *connection
-secret* while the job is running, but never receives the private
-decryption key. Protect repository administrator access and monitor
-for unusual workflows. No client-facing study code is changed.
+GitHub Actions artifacts expire after 30 days, and GitHub scheduled jobs
+may be delayed or disabled after inactivity. Each week or month, download
+a successful encrypted-in-transit (but unencrypted-at-rest) backup to
+your Mac's protected storage (for example FileVault-enabled storage) or
+another private backup location. Retain a copy apart from GitHub and
+Supabase. Do not share the files or add them to the public Git repository.
+
+You can verify the downloaded archive file checksum with:
+
+    shasum -a 256 -c study-public.dump.sha256
+
+You can inspect its internal structure (no response content printed) with:
+
+    pg_restore --list study-public.dump >/dev/null
+
+**Important recovery limitation:** exporting public schema alone does
+not fully back up Supabase managed auth users, provider settings,
+secrets or storage. The study records have foreign keys to auth.users,
+so restoring a functioning clone requires preserving/reconstituting
+matching auth user UUIDs. We must separately verify full-project recovery
+before claiming that sign-ins can be restored seamlessly. The private
+workflow's data-table restore test does NOT certify full-project recovery.
+
+## Zero-impact rule
+
+These reports require only SELECT access to existing tables; they never
+alter any study rows or reveal personal results. The app's normal
+questionnaire and logins are unchanged. No backup is running until the
+private repository is configured and the workflow is successfully started.
