@@ -16,6 +16,9 @@ function shuffle(array,seed){
   for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[j],a[i]]=[a[i],a[j]];}
   return a;
 }
+const EARTH=6371008.8,RAD=Math.PI/180;
+function distance(a,b){return EARTH*Math.hypot(
+  (a[0]-b[0])*RAD*Math.cos((a[1]+b[1])*RAD/2),(a[1]-b[1])*RAD);}
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function preparePromotion({studyId,participants,assignments,completedAssignmentIds,
   batch,seed,originalCount=100,alreadyReleasedBatchIds=[]}){
@@ -58,7 +61,11 @@ function preparePromotion({studyId,participants,assignments,completedAssignmentI
   for(const p of batch.pairs){
     assert(['interesting','uncertain','quiet','broad'].includes(p.mode),'Invalid sampling mode');
     assert([p.A,p.B].every(point=>Array.isArray(point)&&point.length===2&&
-      point.every(Number.isFinite)),'Invalid staged paired coordinate');
+      point.every(Number.isFinite)&&point[0]>=-180&&point[0]<=180&&
+      point[1]>=-90&&point[1]<=90),'Invalid staged paired coordinate');
+    assert(distance(p.A,p.B)<=60.96+0.01 &&
+      (!p.maximumSeparationMeters||distance(p.A,p.B)<=p.maximumSeparationMeters+0.01),
+      'Staged pair exceeds the allowed separation');
   }
   const rows=[];
   for(const [role,userId] of [['A',aId],['B',bId]]){
