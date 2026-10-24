@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek — isolated personal comparison field test</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#132b25;color:#e9eee7;font:16px system-ui}header{padding:12px 18px;background:#193b30}h1{font:1.4em Georgia,serif;margin:0}small{color:#c5d4ca}#map{height:53dvh;min-height:300px;background:#2c483f}
+main{max-width:900px;margin:auto;padding:14px 18px 60px}h2{font:1.2em Georgia,serif}
+button,select,input,textarea{font:inherit}button{display:block;width:100%;margin:8px 0;padding:12px;border:1px solid #729989;border-radius:9px;background:#275446;color:#f8fff8;text-align:left;cursor:pointer}
+button:hover{background:#396e59}button:disabled{opacity:.45;cursor:default}
+button.sel{background:#9bc8a5;color:#183126}select,textarea,input{padding:9px;background:#10231e;color:white;border:1px solid #6e9583;border-radius:7px;max-width:100%}
+.panel{background:#1e3b31;border:1px solid #496e5b;padding:12px 15px;border-radius:12px;margin:12px 0}
+.row{display:flex;gap:9px;flex-wrap:wrap}.row button{width:auto;flex:1;min-width:140px}
+#question{display:none}.dots{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px}.a{background:#55b7ec}.b{background:#f1ad65}
+.tag{color:#b2cbbc;font-size:.86em}#impression{font-size:1.17em;font-weight:650}#status{font-size:.9em;color:#c9d9cf}
+code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55px}
+</style></head><body>
+<header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
+<div id="map"></div>
+<main>
+<section class="panel"><strong>1. Define an entirely separate test area</strong>
+<p class="tag">Use the polygon tool at the top left of the map (click vertices; click the first point to close), or import an existing GeoJSON Polygon/FeatureCollection. For this sandbox, choose an area away from the original study.</p>
+<input type="file" id="geo" accept=".geojson,.json,application/geo+json,application/json">
+<p id="areaStatus" class="tag">No test area yet. Map is centered arbitrarily until you draw or import an area.</p>
+<div class="row"><button id="clear" type="button">Clear test area</button><button id="reset" type="button">Reset comparison history</button></div>
+</section>
+<section class="panel"><strong>2. Choose an impression to compare</strong>
+<p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
+<select id="feeling"><option>Feels imprinted with human happiness</option><option>Feels creepy or haunted</option><option>A pleasant sense of melancholy or wistfulness</option><option>A haunting sense of emptiness, solitude, or something lost</option><option>Feels spiritually unwelcoming</option></select>
+<label for="custom">Or enter a custom impression:</label> <input id="custom" placeholder="An impression in your own words" style="width:100%">
+<button id="start" disabled>Present a comparison</button>
+</section>
+<section class="panel" id="question">
+<p>This area may be associated with the following impression:</p><p id="impression"></p>
+<h2>At which location is this feeling stronger?</h2>
+<button data-answer="A"><span class="dots a"></span>The feeling is stronger at Location A</button>
+<button data-answer="B"><span class="dots b"></span>The feeling is stronger at Location B</button>
+<button data-answer="equal">The feeling is about equally strong at both locations</button>
+<button data-answer="neither">I don't sense this feeling at either location</button>
+<button data-answer="different">The locations feel different, but neither feels clearly stronger</button>
+<p id="round" class="tag"></p>
+</section>
+<p id="status" role="status"></p>
+<div class="row"><button id="export">Export anonymous test comparisons (JSON)</button></div>
+<p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until exported; refreshing clears the session. No actual study observations are accessed.</p>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const map=L.map('map').setView([40.35,-74.10],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const layer=new L.FeatureGroup().addTo(map);
+map.addControl(new L.Control.Draw({edit:{featureGroup:layer,remove:true},draw:{polyline:false,rectangle:false,circle:false,circlemarker:false,marker:false,polygon:{allowIntersection:false,showArea:true}}}));
+let polygons=[],history=[],current=null,markers=[],allSites=[];
+function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[]}
+function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
+function allowed(p){return polygons.some(rings=>ringInside(p,rings[0])&&!rings.slice(1).some(h=>ringInside(p,h)))}
+function bounds(){const pts=polygons.flatMap(r=>r[0]);return [Math.min(...pts.map(p=>p[0])),Math.min(...pts.map(p=>p[1])),Math.max(...pts.map(p=>p[0])),Math.max(...pts.map(p=>p[1]))]}
+function d(a,b){const dy=(a[1]-b[1])*111195,dx=(a[0]-b[0])*111195*Math.cos((a[1]+b[1])*Math.PI/360);return Math.hypot(dx,dy)}
+function randomPoint(center=null,radius=150){const [w,s,e,n]=bounds();
+for(let i=0;i<5000;i++){let p;if(center){const theta=Math.random()*2*Math.PI,r=Math.sqrt(Math.random())*radius;p=[center[0]+r*Math.cos(theta)/(111195*Math.cos(center[1]*Math.PI/180)),center[1]+r*Math.sin(theta)/111195]}
+else p=[w+Math.random()*(e-w),s+Math.random()*(n-s)];
+if(allowed(p))return p;}return null}
+function addPolygonLayer(leafletLayer){
+ const g=leafletLayer.toGeoJSON().geometry;if(!g)return;
+ if(g.type==='Polygon')polygons.push(g.coordinates);
+ if(g.type==='MultiPolygon')polygons.push(...g.coordinates);
+}
+function refreshArea(){polygons=[];layer.eachLayer(addPolygonLayer);
+$('areaStatus').textContent=polygons.length?'Eligible area defined; '+polygons.length+' polygon(s).':'No test area yet.';
+$('start').disabled=!polygons.length;history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none'}
+map.on(L.Draw.Event.CREATED,e=>{layer.addLayer(e.layer);refreshArea();map.fitBounds(layer.getBounds().pad(.12))});
+map.on(L.Draw.Event.EDITED,refreshArea);map.on(L.Draw.Event.DELETED,refreshArea);
+$('geo').onchange=async e=>{
+ try{const data=JSON.parse(await e.target.files[0].text()),features=data.type==='FeatureCollection'?data.features:data.type==='Feature'?[data]:[{type:'Feature',geometry:data}];
+ const polys=features.filter(f=>['Polygon','MultiPolygon'].includes(f.geometry?.type));
+ if(!polys.length)throw Error('No polygons found');layer.clearLayers();
+ polys.forEach(f=>L.geoJSON(f,{onEachFeature:(feature,lyr)=>{if(lyr instanceof L.Polygon)layer.addLayer(lyr)}}));
+ refreshArea();map.fitBounds(layer.getBounds().pad(.12));$('status').textContent='Imported isolated test area.';
+ }catch(err){$('status').textContent='Import failed: '+err.message}
+};
+$('clear').onclick=()=>{layer.clearLayers();refreshArea()};
+$('reset').onclick=()=>{history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none';$('status').textContent='Comparisons reset; test boundary preserved.'};
+function next(){
+ clearMarkers();
+ const feeling=$('custom').value.trim()||$('feeling').value;
+ const relevant=history.filter(h=>h.feeling===feeling);
+ let reference=null;
+ // Choose previous winners frequently, plus exploration to avoid lock-in.
+ const winners=relevant.filter(h=>h.answer==='A'||h.answer==='B').map(h=>h.answer==='A'?h.A:h.B);
+ if(winners.length&&Math.random()<.7)reference=winners[Math.floor(Math.random()*winners.length)];
+ if(!reference)reference=allSites.length&&Math.random()<.5?allSites[Math.floor(Math.random()*allSites.length)]:randomPoint();
+ let fresh=null;
+ const near=reference&&Math.random()<.68;
+ if(near)fresh=randomPoint(reference,80+Math.random()*200);
+ if(!fresh||d(reference,fresh)<12)fresh=randomPoint();
+ if(!reference||!fresh||d(reference,fresh)<12){$('status').textContent='Area too narrow for two distinct sites. Enlarge the polygon.';return}
+ const swapped=Math.random()<.5;
+ current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
+ for(const [point,letter,color] of [[current.A,'A','#55b7ec'],[current.B,'B','#f1ad65']]){
+  const icon=L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:26px;font-weight:bold;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[30,30],iconAnchor:[15,15]});
+  markers.push(L.marker([point[1],point[0]],{icon}).addTo(map));
+ }
+ const xy=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]);
+ map.fitBounds(xy.pad(1.1),{maxZoom:18});
+ $('impression').textContent='“'+feeling+'”';$('round').textContent='Comparison '+(history.length+1);
+ $('question').style.display='block';$('status').textContent='Choose the answer that best reflects your impression of the two marked locations.';
+}
+$('start').onclick=next;
+document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
+ if(!current)return;
+ history.push({...current,answer:b.dataset.answer});
+ allSites.push(current.A,current.B);
+ current=null;
+ $('status').textContent='Response recorded for this test session ('+history.length+' comparisons).';
+ next();
+});
+$('export').onclick=()=>{
+ const obj={exportVersion:1,isolatedTest:true,area:layer.toGeoJSON(),comparisons:history};
+ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminal-personal-test.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+})();
+</script></body></html>
