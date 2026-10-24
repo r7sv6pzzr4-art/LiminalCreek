@@ -90,3 +90,30 @@ test('results release remains locked until plan closes and both finish both phas
   assert(!personal.canReleaseResults({study,participants:people.map((p,i)=>i?{...p,completedSharedPairs:199}:p),
     actingUserId:'a'}));
 });
+
+test('administrator percentage accepts 0 and 100 without changing original pairs',()=>{
+  assert.deepEqual(adaptive.modesForPercentage(0),
+    {interesting:0,uncertain:0,quiet:0,broad:1});
+  assert.deepEqual(adaptive.modesForPercentage(100),
+    {interesting:0.47,uncertain:0.33,quiet:0.20,broad:0});
+  for(const invalid of [-1,101,55.5,NaN,'50',null])
+    assert.throws(()=>adaptive.modesForPercentage(invalid),/percentage/i);
+  const before=JSON.stringify(original);
+  for(const pct of [0,25,50,75,100]){
+    const result=adaptive.generateBatch({count:12,seed:'percent-'+pct,
+      bounds,eligible,observations,existingPairs:original,batchIndex:2,
+      adaptivePercent:pct});
+    assert.equal(result.pairs.length,12);
+    assert.equal(result.adaptivePercent,pct);
+    assert.equal(result.pairs.filter(p=>p.mode!=='broad').length,
+      Math.round(pct/100*12), 'Approximate adaptive mix at batch scale');
+    assert.equal(JSON.stringify(original),before);
+  }
+  const randomOnly=adaptive.generateBatch({count:12,seed:'random-only',
+    bounds,eligible,observations:[],existingPairs:original,
+    adaptivePercent:0});
+  assert(randomOnly.pairs.every(p=>p.mode==='broad'));
+  assert.throws(()=>adaptive.generateBatch({count:2,seed:'ambiguous',
+    bounds,eligible,adaptivePercent:20,modes:adaptive.DEFAULT_MODES}),
+    /either adaptivePercent/);
+});
