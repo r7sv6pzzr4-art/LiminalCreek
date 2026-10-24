@@ -23,7 +23,9 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 <div id="setupFields">
 <label for="basemap">Background map:</label>
 <select id="basemap"><option value="osm" selected>Current OpenStreetMap</option><option value="1930">1930s NJ aerial photography (historic)</option></select>
-<p id="layerStatus" class="tag">Current map is ready; select historic imagery to switch.</p>
+<p id="layerStatus" class="tag">OpenStreetMap is displayed. The 1979 imagery shown on HistoricAerials is copyright-protected and cannot be embedded here without permission.</p>
+<button id="historic1979" type="button">Open HistoricAerials at this map location (select 1979)</button>
+<p class="tag">The historic viewer opens separately, positioned at the map center. Select 1979 in its aerial-years list. Keep both windows open to compare locations; the test app does not copy its imagery.</p>
 <p class="tag">Use the polygon tool at the top left of the map (click vertices; click the first point to close), or import an existing GeoJSON Polygon/FeatureCollection. For this sandbox, choose an area away from the original study.</p>
 <input type="file" id="geo" accept=".geojson,.json,application/geo+json,application/json">
 <p id="areaStatus" class="tag">No test area yet. Map is centered arbitrarily until you draw or import an area.</p>
@@ -93,6 +95,12 @@ async function setupHistoric(){
 map.addControl(new L.Control.Draw({edit:{featureGroup:layer,remove:true},draw:{polyline:false,rectangle:false,circle:false,circlemarker:false,marker:false,polygon:{allowIntersection:false,showArea:true}}}));
 let polygons=[],history=[],current=null,markers=[],allSites=[];
 const TEST_KEY='liminal-personal-independent-fieldtest-v2';
+$('historic1979').onclick=()=>{
+ const center=map.getCenter(),zoom=Math.min(19,Math.max(4,map.getZoom()));
+ const url='https://www.historicaerials.com/viewer?lat='+encodeURIComponent(center.lat.toFixed(6))+
+   '&lon='+encodeURIComponent(center.lng.toFixed(6))+'&zoom='+encodeURIComponent(zoom);
+ window.open(url,'_blank','noopener,noreferrer');
+};
 function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[]}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
 const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
