@@ -154,7 +154,7 @@ function priority(mode,site){
     *(1-Math.min(1,e.interest))+(Number.isFinite(e.closestQuiet)?0.25:0);
   return 1;
 }
-function modeCounts(count,effectiveModes){
+function modeCounts(count,modes){
   const list=Object.entries(modes).map(([mode,fraction])=>({mode,
     count:Math.floor(count*fraction),remainder:count*fraction-Math.floor(count*fraction)}));
   let leftover=count-list.reduce((a,b)=>a+b.count,0);
