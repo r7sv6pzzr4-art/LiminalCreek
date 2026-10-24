@@ -138,7 +138,7 @@ test('relative personal mapping does not reuse initial intensity scores to rank 
   assert(!('originalRating' in a) && !('referenceIsA' in a));
   assert(own.some(o=>JSON.stringify(o.point)===JSON.stringify(a.pointA)||
     JSON.stringify(o.point)===JSON.stringify(a.pointB)));
-  assert(['A','B','equal','neither','different'].every(x=>a.choices.includes(x)));
+  assert(['A','B','equal','neither','different'].every(x=>a.choices.some(c=>c.value===x&&c.label.length>15)));
   assert.deepEqual(personal.validateComparisonAnswer({feeling:'Creepy',choice:'different'},
     {allowedFeelings:['Creepy']}),{feeling:'Creepy',choice:'different',note:''});
   assert.throws(()=>personal.validateComparisonAnswer({feeling:'Creepy',choice:'invalid'},
