@@ -201,6 +201,7 @@ function restore(){
    allSites=history.flatMap(x=>[x.A,x.B]);
    $('savedCounter').textContent=history.length+' comparisons saved locally.';
  }
+ saveLocal();
  }catch(e){$('status').textContent='Could not restore previous local test session.'}
 }
 restore();
