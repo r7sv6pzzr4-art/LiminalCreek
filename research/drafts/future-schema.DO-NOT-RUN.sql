@@ -97,21 +97,28 @@ create table if not exists public.liminal_personal_feelings (
   created_at timestamptz not null default now(),
   primary key(study_id,user_id,label)
 );
-create table if not exists public.liminal_personal_responses (
+-- Personal mapping now collects two-dot relative comparisons, NOT 1-10 scores.
+-- The private backend must keep which dot was the original reference separate
+-- from the participant-facing two points. No original ratings are model inputs.
+create table if not exists public.liminal_personal_comparisons (
   id uuid primary key default gen_random_uuid(),
-  study_id uuid not null,
-  user_id uuid not null,
-  location_id uuid not null,
-  feeling text not null,
-  intensity smallint check(intensity between 1 and 10),
+  study_id uuid not null references public.studies(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  region_id uuid not null references public.liminal_personal_regions(id) on delete cascade,
+  point_a jsonb not null,
+  point_b jsonb not null,
+  original_reference_is_a boolean not null,
+  feeling text not null check(length(feeling) between 2 and 120),
+  response_choice text check(response_choice in
+    ('A','B','equal','neither','different')),
   note text not null default '' check(length(note)<=4000),
-  recorded_at timestamptz not null default now(),
-  foreign key(location_id,study_id,user_id)
-    references public.liminal_personal_locations(id,study_id,user_id),
-  unique(location_id),
-  check((feeling='none' and intensity is null)
-    or (feeling<>'none' and intensity is not null))
+  presented_at timestamptz,
+  responded_at timestamptz
 );
+-- Never reveal original_reference_is_a or prior responses to the user.
+-- A future SECURITY DEFINER RPC will return only A/B points and feeling,
+-- then accept a participant's relative answer. Strict user ownership
+-- and phase separation MUST be checked in that server RPC.
 create table if not exists public.liminal_reveal_audit (
   study_id uuid primary key references public.studies(id) on delete cascade,
   authorized_by uuid not null references auth.users(id),
@@ -126,12 +133,12 @@ alter table public.liminal_personal_sessions enable row level security;
 alter table public.liminal_personal_regions enable row level security;
 alter table public.liminal_personal_locations enable row level security;
 alter table public.liminal_personal_feelings enable row level security;
-alter table public.liminal_personal_responses enable row level security;
+alter table public.liminal_personal_comparisons enable row level security;
 alter table public.liminal_reveal_audit enable row level security;
 revoke all on public.liminal_sampling_plans,public.liminal_adaptive_batches,
   public.liminal_adaptive_pair_staging,public.liminal_personal_sessions,
   public.liminal_personal_regions,public.liminal_personal_locations,
-  public.liminal_personal_feelings,public.liminal_personal_responses,
+  public.liminal_personal_feelings,public.liminal_personal_comparisons,
   public.liminal_reveal_audit from public,anon,authenticated;
 -- No ALTER TABLE to existing studies/assignments/responses is in this draft.
 -- No views, GRANTs, RPCs, or release triggers are installed here.
