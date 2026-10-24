@@ -95,14 +95,65 @@ function addFeeling(current,newLabel){
   const matching=current.find(s=>s.toLocaleLowerCase()===label.toLocaleLowerCase());
   return {labels:matching?current.slice():current.concat(label),selected:matching||label};
 }
-function validatePersonalAnswer({feeling,intensity,note=''},{allowedFeelings=[]}={}){
-  const choice=String(feeling||'').trim();
-  assert(choice==='none'||allowedFeelings.includes(choice),
-    'Select a listed feeling or add the new feeling first');
-  if(choice==='none'){assert(intensity==null,'No-feeling response cannot have an intensity');}
-  else{assert(Number.isInteger(intensity)&&intensity>=1&&intensity<=10,'Personal intensity must be 1–10');}
+/*
+ * Personal-study responses are purely comparative. Original 1–4 strengths
+ * are used only upstream to identify candidate regions, NEVER as intensity
+ * priors, ranks, weights, or training labels in this phase.
+ */
+const COMPARISON_CHOICES=Object.freeze([
+  'A','B','equal','neither','different'
+]);
+function validateComparisonAnswer({feeling,choice,note=''},{allowedFeelings=[]}={}){
+  assert(allowedFeelings.includes(feeling),'Choose one of the listed or newly added feelings');
+  assert(COMPARISON_CHOICES.includes(choice),'Invalid comparison answer');
   assert(typeof note==='string'&&note.length<=4000,'Invalid note');
-  return {feeling:choice,intensity:choice==='none'?null:intensity,note};
+  return {feeling,choice,note};
+}
+function createRelativeQuestion({region,referencePoints,eligible,seed,
+  previousComparisons=[],minimumSpacingMeters=20}){
+  assert(region&&region.approximateArea&&Array.isArray(region.suggestedFeelings),
+    'A personal region is required');
+  assert(Array.isArray(referencePoints)&&referencePoints.length>0,
+    'Private reference coordinates are required');
+  assert(Array.isArray(previousComparisons),'Comparisons must be an array');
+  assert(typeof eligible==='function'&&seed!=null,'Eligibility and fixed seed required');
+  const rng=random(seed),feelingList=region.suggestedFeelings;
+  assert(feelingList.length>0,'At least one feeling is required');
+  // Select category without using original response intensity or counts.
+  const feeling=feelingList[Math.floor(rng()*feelingList.length)];
+  // Reference coordinates are supplied by the private backend; the output
+  // NEVER labels the original versus newly proposed site.
+  const references=referencePoints.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite));
+  assert(references.length>0,'No valid reference point');
+  const reference=references[Math.floor(rng()*references.length)];
+  const {center,radiusMeters}=region.approximateArea;
+  assert(Array.isArray(center)&&center.length===2&&Number.isFinite(radiusMeters),
+    'Invalid approximate exploration region');
+  const already=previousComparisons.flatMap(c=>[c.pointA,c.pointB].filter(Boolean));
+  let newPoint=null;
+  for(let i=0;i<1800;i++){
+    // Use only the previous *relative comparisons* to shift proposals toward
+    // earlier comparison areas. Original 1–4 strength scores are excluded.
+    const anchors=previousComparisons.length?
+      previousComparisons.flatMap(c=>[c.pointA,c.pointB].filter(Boolean)): [];
+    const focus=anchors.length&&rng()<0.6?anchors[Math.floor(rng()*anchors.length)]:center;
+    const travel=focus===center?radiusMeters*Math.sqrt(rng()):25+95*Math.sqrt(rng());
+    const candidate=pointNear(focus,2*Math.PI*rng(),travel);
+    if(distance(candidate,center)>radiusMeters||!eligible(candidate))continue;
+    if(distance(candidate,reference)<minimumSpacingMeters)continue;
+    if(referencePoints.some(p=>distance(candidate,p)<minimumSpacingMeters))continue;
+    if(already.some(p=>distance(candidate,p)<minimumSpacingMeters))continue;
+    newPoint=candidate;break;
+  }
+  assert(newPoint,'Could not find a new eligible comparison site');
+  const referenceIsA=rng()<0.5;
+  return {version:2,question:'Which of these locations feels more '+feeling+'?',
+    feeling,pointA:referenceIsA?reference.slice():newPoint,
+    pointB:referenceIsA?newPoint:reference.slice(),
+    choices:COMPARISON_CHOICES.slice(),
+    // This client-facing shape deliberately omits source, history,
+    // original descriptions, original strength, and original comments.
+    personal:true};
 }
 function canReleaseResults({study,participants,actingUserId}){
   // Pure UI/server validation helper, not an authorization mechanism by itself.
@@ -114,5 +165,5 @@ function canReleaseResults({study,participants,actingUserId}){
   return participants.every(p=>p.completedSharedPairs>=study.finalPairCount &&
     ['completed','skipped'].includes(p.personalStatus));
 }
-const api={summarizePersonalRegions,addFeeling,validatePersonalAnswer,canReleaseResults};
+const api={summarizePersonalRegions,addFeeling,validateComparisonAnswer,createRelativeQuestion,canReleaseResults};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
