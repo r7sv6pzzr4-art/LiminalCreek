@@ -147,7 +147,8 @@ function createRelativeQuestion({region,referencePoints,eligible,seed,
   }
   assert(newPoint,'Could not find a new eligible comparison site');
   const referenceIsA=rng()<0.5;
-  return {version:2,question:'Which of these locations feels more '+feeling+'?',
+  return {version:2,context:'This area may be associated with the following feeling: '+feeling+'.',
+    question:'At which location is this feeling stronger?',
     feeling,pointA:referenceIsA?reference.slice():newPoint,
     pointB:referenceIsA?newPoint:reference.slice(),
     choices:COMPARISON_CHOICES.slice(),
