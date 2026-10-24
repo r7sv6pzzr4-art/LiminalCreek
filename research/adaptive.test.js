@@ -70,9 +70,9 @@ test('new feelings become reusable participant choices, with no duplication',()=
   const two=personal.addFeeling(one.labels,'mysterious stillness');
   assert.equal(two.labels.length,3);
   assert.equal(two.selected,'Mysterious stillness');
-  assert.deepEqual(personal.validatePersonalAnswer({feeling:one.selected,intensity:8},
-    {allowedFeelings:one.labels}),{feeling:one.selected,intensity:8,note:''});
-  assert.throws(()=>personal.validatePersonalAnswer({feeling:'Unknown',intensity:8},
+  assert.deepEqual(personal.validateComparisonAnswer({feeling:one.selected,choice:'A'},
+    {allowedFeelings:one.labels}),{feeling:one.selected,choice:'A',note:''});
+  assert.throws(()=>personal.validateComparisonAnswer({feeling:'Unknown',choice:'A'},
     {allowedFeelings:one.labels}));
 });
 test('results release remains locked until plan closes and both finish both phases',()=>{
@@ -116,4 +116,29 @@ test('administrator percentage accepts 0 and 100 without changing original pairs
   assert.throws(()=>adaptive.generateBatch({count:2,seed:'ambiguous',
     bounds,eligible,adaptivePercent:20,modes:adaptive.DEFAULT_MODES}),
     /either adaptivePercent/);
+});
+
+test('relative personal mapping does not reuse initial intensity scores to rank sites',()=>{
+  const own=[
+    {point:[-74.170,40.320],valence:'bad',strength:4,descriptions:['Creepy']},
+    {point:[-74.1705,40.3203],valence:'bad',strength:3,descriptions:['Creepy']}
+  ];
+  const region=personal.summarizePersonalRegions({
+    observations:own,eligible,seed:'private-relative',sitesPerRegion:2
+  }).regions[0];
+  const options={region,referencePoints:own.map(o=>o.point),eligible,seed:'round1'};
+  const a=personal.createRelativeQuestion(options);
+  const b=personal.createRelativeQuestion({...options,
+    // Altering the ratings of original observations MUST NOT alter follow-up.
+    originalIntensityScores:[1,1],priorRating:999});
+  assert.deepEqual(a,b);
+  assert(a.feeling==='Creepy');
+  assert(!('originalRating' in a) && !('referenceIsA' in a));
+  assert(own.some(o=>JSON.stringify(o.point)===JSON.stringify(a.pointA)||
+    JSON.stringify(o.point)===JSON.stringify(a.pointB)));
+  assert(['A','B','equal','neither','different'].every(x=>a.choices.includes(x)));
+  assert.deepEqual(personal.validateComparisonAnswer({feeling:'Creepy',choice:'different'},
+    {allowedFeelings:['Creepy']}),{feeling:'Creepy',choice:'different',note:''});
+  assert.throws(()=>personal.validateComparisonAnswer({feeling:'Creepy',choice:'invalid'},
+    {allowedFeelings:['Creepy']}),/comparison/);
 });
