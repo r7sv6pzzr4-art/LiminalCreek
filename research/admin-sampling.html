@@ -30,7 +30,11 @@ output{font-size:1.3rem;font-weight:700}
 <input id="batch" type="number" min="1" max="30" step="1" value="20">
 <p class="status">Your selection would affect <strong>future, not yet generated</strong> batches only. Frozen or already assigned sites—and the original 100 pairs—must never be changed. Both participants continue receiving matched pairs, independently shuffled.</p>
 <p class="status">The eventual real control must be available only to the authenticated study administrator and enforced by a private server function. Neither participant will be notified when batches are generated or settings are changed.</p>
-<button type="button" disabled>Save to study — not connected</button>
+<div class="status" id="adminState">This branch-only prototype is not connected to the live database.</div>
+<button type="button" id="load" disabled>Load administrator progress — requires deployment</button>
+<div id="progress" class="status" aria-live="polite"></div>
+<button type="button" id="save" disabled>Save future-batch settings — requires deployment</button>
+<p class="status">Future workflow: an administrator privately generates and freezes a batch, reviews its validation report, then explicitly releases the batch by ID. Release is not available until both original 100-location queues are complete. No participant observations or paired coordinates appear on this page.</p>
 </main>
 <script>
 const slider=document.querySelector('#adaptive'),pct=document.querySelector('#percentage'),
