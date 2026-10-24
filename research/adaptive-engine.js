@@ -201,7 +201,7 @@ function generateBatch(options){
   const used=previousPoints(existingPairs);
   const rng=rngFor(seed);
   const pool=buildPool({bounds,eligible,observations:obs,existingPoints:used,count,rng});
-  const output=[], slots=shuffled(modeCounts(count,modes)
+  const output=[], slots=shuffled(modeCounts(count,effectiveModes)
     .flatMap(({mode,count:n})=>Array(n).fill(mode)),rng);
   for(let j=0;j<slots.length;j++){
     const mode=slots[j];
