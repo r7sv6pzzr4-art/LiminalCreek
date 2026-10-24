@@ -15,7 +15,7 @@ create table if not exists public.liminal_sampling_plans (
   plan_closed boolean not null default false,
   adaptive_percent smallint not null default 50
     check(adaptive_percent between 0 and 100),
-  batch_size smallint not null default 12
+  batch_size smallint not null default 20
     check(batch_size between 1 and 30),
   activated_at timestamptz,
   closed_at timestamptz,
