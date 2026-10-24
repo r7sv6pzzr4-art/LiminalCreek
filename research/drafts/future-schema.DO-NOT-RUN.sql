@@ -13,6 +13,10 @@ create table if not exists public.liminal_sampling_plans (
   original_pair_count integer not null default 100 check (original_pair_count=100),
   final_pair_count integer check (final_pair_count>=100),
   plan_closed boolean not null default false,
+  adaptive_percent smallint not null default 50
+    check(adaptive_percent between 0 and 100),
+  batch_size smallint not null default 12
+    check(batch_size between 1 and 30),
   activated_at timestamptz,
   closed_at timestamptz,
   check (not plan_closed or final_pair_count is not null)
@@ -43,6 +47,10 @@ create table if not exists public.liminal_adaptive_pair_staging (
     check(maximum_separation_meters>0 and maximum_separation_meters<=60.96),
   unique(batch_id,pair_index)
 );
+-- Only the authenticated admin may eventually edit adaptive_percent and batch_size
+-- through an audited, server-validated RPC. Changes apply to new batches only.
+-- They must NEVER replan existing staged/released sites, alter original 100,
+-- expose private data, or automatically adjust final_pair_count.
 -- DO NOT create a trigger that inserts staged pairs into public.assignments.
 -- A separate reviewed, transactional promotion process must:
 --   * wait until BOTH finish all original 100 assignments,
