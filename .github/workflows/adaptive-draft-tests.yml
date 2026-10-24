@@ -1,8 +1,7 @@
 name: Check inactive adaptive draft
+# Draft-only: run intentionally from Actions rather than on every edit.
+# Prevents repeated notifications while this feature is under development.
 on:
-  push:
-    branches:
-      - adaptive-safe-draft-20261022
   workflow_dispatch:
 jobs:
   synthetic-tests:
