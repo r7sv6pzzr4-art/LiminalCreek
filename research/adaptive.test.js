@@ -133,6 +133,8 @@ test('relative personal mapping does not reuse initial intensity scores to rank 
     originalIntensityScores:[1,1],priorRating:999});
   assert.deepEqual(a,b);
   assert(a.feeling==='Creepy');
+  assert.equal(a.question,'At which location is this feeling stronger?');
+  assert.equal(a.context,'This area may be associated with this impression:');
   assert(!('originalRating' in a) && !('referenceIsA' in a));
   assert(own.some(o=>JSON.stringify(o.point)===JSON.stringify(a.pointA)||
     JSON.stringify(o.point)===JSON.stringify(a.pointB)));
