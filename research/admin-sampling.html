@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiminalCreek · Sampling administration (inactive prototype)</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}
+body{margin:0;background:#10221d;color:#ecf2ed}
+main{max-width:660px;margin:5vh auto;padding:26px;background:#1d382d;border:1px solid #527060;border-radius:18px}
+h1{font-size:1.4rem;margin-top:0}
+label{display:block;margin:23px 0 10px;font-weight:650}
+input[type="range"]{width:100%;accent-color:#a3d5ac}
+input[type="number"]{background:#12271f;border:1px solid #94ad9e;border-radius:8px;color:white;padding:10px;width:85px;font:inherit}
+figure{margin:18px 0 0;display:flex;height:28px;border-radius:9px;overflow:hidden}
+#randomBand{background:#6ab4a4}#adaptiveBand{background:#e2b878}
+.status{color:#bdcfc1;font-size:.9rem;line-height:1.5}
+button{padding:12px 16px;border-radius:10px;background:#a3d5ac;color:#183025;border:0;font-weight:700}
+button:disabled{opacity:.4}
+output{font-size:1.3rem;font-weight:700}
+</style></head>
+<body><main>
+<h1>Sampling administration</h1>
+<p class="status"><strong>INACTIVE PROTOTYPE.</strong> This is a standalone preview, not linked to Supabase or the live LiminalCreek application. Changes here do not save or change study assignments.</p>
+<label for="adaptive">Adaptive sampling in future batches: <output id="percentage">50%</output></label>
+<input type="range" id="adaptive" min="0" max="100" step="5" value="50">
+<figure aria-label="Distribution of future sampling"><div id="randomBand"></div><div id="adaptiveBand"></div></figure>
+<p class="status" id="summary" role="status"></p>
+<label for="batch">Number of new matched pairs per batch</label>
+<input id="batch" type="number" min="1" max="30" step="1" value="20">
+<p class="status">Your selection would affect <strong>future, not yet generated</strong> batches only. Frozen or already assigned sites—and the original 100 pairs—must never be changed. Both participants continue receiving matched pairs, independently shuffled.</p>
+<p class="status">The eventual real control must be available only to the authenticated study administrator and enforced by a private server function. Neither participant will be notified when batches are generated or settings are changed.</p>
+<div class="status" id="adminState">This branch-only prototype is not connected to the live database.</div>
+<button type="button" id="load">Load administrator progress</button>
+<div id="progress" class="status" aria-live="polite"></div>
+<button type="button" id="save" disabled>Save future-batch settings</button>
+<label for="approvedTotal">Total shared pairs authorized (initially 100)</label>
+<input id="approvedTotal" type="number" min="100" max="10000" step="1" value="100">
+<button type="button" id="authorize" disabled>Authorize total shared pairs</button>
+<label for="batchId">Frozen batch ID to release (only after private staging and verification)</label>
+<input id="batchId" type="text" autocomplete="off" placeholder="Batch UUID" style="width:100%;box-sizing:border-box">
+<button type="button" id="release" disabled>Review frozen batch release</button>
+<div class="panel" id="releaseReview" hidden style="background:#152e25;border:1px solid #9da88b;padding:14px;border-radius:12px;margin-top:12px">
+<strong>Separate verification — release new assigned locations</strong>
+<p class="status">This operation adds a previously reviewed batch to both queues. It does not reveal recorded impressions or comments.</p>
+<p id="releaseReviewDetail" class="status"></p>
+<label for="verifyBatch">To confirm, type the batch ID shown above exactly</label>
+<input id="verifyBatch" type="text" autocomplete="off" style="width:100%;box-sizing:border-box">
+<button type="button" id="confirmRelease">Confirm batch release</button>
+<button type="button" id="cancelRelease">Cancel</button>
+</div>
+<div class="panel" style="margin-top:25px;border-top:1px solid #79948a;padding-top:18px">
+<h2>Share study results — future feature</h2>
+<p class="status">The meaning and scope of sharing have not been decided. Releasing data must never occur as part of sampling or batch release.</p>
+<button type="button" disabled>Preview exactly what would be shared — not implemented</button>
+<button type="button" disabled>Verify identity and confirm sharing — not implemented</button>
+</div>
+<p class="status">Release is blocked until the backend confirms that both original 100-location queues are complete. A released batch cannot be released again. This page shows only completion counts and administrative settings—not participants’ impressions or paired coordinates.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const slider=document.querySelector('#adaptive'),pct=document.querySelector('#percentage'),
+summary=document.querySelector('#summary'),random=document.querySelector('#randomBand'),
+adaptive=document.querySelector('#adaptiveBand');
+function update(){const a=Number(slider.value),r=100-a;pct.textContent=a+'%';
+random.style.width=r+'%';adaptive.style.width=a+'%';
+summary.textContent=a===0?'100% broad, spatially balanced sampling; no response-informed site selection.':
+a===100?'All new pairs are informed by previous observations, including interesting, uncertain, and apparently quiet areas.':
+r+'% broad sampling / '+a+'% response-informed sampling. The precise mix is randomized within each frozen batch.';
+}
+slider.addEventListener('input',update);update();
+const $=id=>document.getElementById(id);
+const state=$('adminState'),progress=$('progress'),load=$('load'),save=$('save'),release=$('release'),authorize=$('authorize');
+const db=window.supabase?.createClient(
+  'https://fwdsoluixqeycapncecl.supabase.co',
+  'sb_publishable_qoZbnqS3AfGmezZBdYo_vQ_Y4rH1a_6',
+  {auth:{persistSession:true,autoRefreshToken:true}});
+let approved=false,closed=true,baselineReady=false,pendingBatch=null;
+async function invoke(name,args={}){
+  const {data:{user},error:userError}=await db.auth.getUser();
+  if(userError||!user)throw new Error('Sign in through the LiminalCreek app first.');
+  const {data,error}=await db.rpc(name,args);
+  if(error)throw new Error(error.message);
+  return data;
+}
+load.onclick=async()=>{
+  approved=false;save.disabled=true;release.disabled=true;authorize.disabled=true;
+  progress.textContent='Checking administrator authorization…';
+  if(!db){progress.textContent='Connection library did not load.';return;}
+  try{
+    const info=await invoke('liminal_admin_progress');
+    const people=info?.participants||[],settings=info?.settings;
+    if(!settings||people.length!==2)throw new Error('The sampling system has not been initialized for two participants.');
+    closed=!!settings.planClosed;
+    baselineReady=people.every(p=>p.originalCompleted===100);
+    $('adaptive').value=settings.adaptivePercent;
+    $('batch').value=settings.batchSize;
+    $('approvedTotal').value=settings.approvedPairLimit;
+    update();
+    progress.textContent=people.map(p=>p.participant+': '+p.completed+'/'+p.assigned+
+      ' completed (original '+p.originalCompleted+'/100)').join(' · ')+
+      '. Staged batches: '+info.stagedBatches+
+      '. Original cohorts complete: '+(baselineReady?'yes':'not yet')+
+      '. Authorized shared pairs: '+settings.approvedPairLimit+
+      '. Sampling plan '+(closed?'closed':'open')+'.';
+    state.textContent='Authorized administrator — progress shown without observation data.';
+    approved=true;save.disabled=closed;authorize.disabled=closed;release.disabled=closed||!baselineReady;
+  }catch(e){progress.textContent=e.message;state.textContent='Admin access not available.';}
+};
+save.onclick=async()=>{
+  if(!approved||closed)return;
+  const pct=Number(slider.value),size=Number($('batch').value);
+  if(!Number.isInteger(size)||size<1||size>30){progress.textContent='Batch size must be 1–30.';return;}
+  save.disabled=true;
+  try{
+    await invoke('liminal_admin_set_sampling',{p_percent:pct,p_batch_size:size});
+    progress.textContent='Settings saved for future batches only; existing sites are unchanged.';
+  }catch(e){progress.textContent='Settings not saved: '+e.message;}
+  finally{save.disabled=closed;}
+};
+authorize.onclick=async()=>{
+  if(!approved||closed)return;
+  const count=Number($('approvedTotal').value);
+  if(!Number.isInteger(count)||count<100||count>10000){
+    progress.textContent='Total shared pairs must be between 100 and 10000.';return;
+  }
+  if(!confirm('Authorize up to '+count+' matched shared-study pairs? No new locations are generated by this action.'))return;
+  authorize.disabled=true;
+  try{
+    await invoke('liminal_admin_authorize_pairs',{p_new_total:count});
+    await load.onclick();
+  }catch(e){progress.textContent='Authorization not saved: '+e.message;authorize.disabled=false;}
+};
+release.onclick=()=>{
+  if(!approved||closed||!baselineReady)return;
+  const id=$('batchId').value.trim();
+  if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)){
+    progress.textContent='Enter a valid frozen batch UUID.';return;
+  }
+  pendingBatch=id;
+  $('releaseReviewDetail').textContent='Batch: '+id+
+    '. Final server verification will also check authorization, study readiness, pair count, and duplicate releases.';
+  $('verifyBatch').value='';
+  $('releaseReview').hidden=false;
+};
+$('cancelRelease').onclick=()=>{pendingBatch=null;$('verifyBatch').value='';$('releaseReview').hidden=true;};
+$('confirmRelease').onclick=async()=>{
+  const id=pendingBatch;
+  if(!id||!approved||closed||!baselineReady)return;
+  if($('verifyBatch').value.trim()!==id){
+    progress.textContent='Verification failed: batch ID did not match. Nothing changed.';return;
+  }
+  // Recheck current administrator identity and state at the server; a separate
+  // later process will be required for eventual release of private study data.
+  $('confirmRelease').disabled=true;
+  try{
+    const result=await invoke('liminal_admin_release_batch',{p_batch_id:id});
+    progress.textContent='Batch released: '+result.newPairs+' new matched pairs. Original assignments unchanged.';
+  }catch(e){progress.textContent='Batch NOT released: '+e.message;}
+  finally{
+    $('confirmRelease').disabled=false;pendingBatch=null;
+    $('verifyBatch').value='';$('releaseReview').hidden=true;
+    await load.onclick();
+  }
+};
+
+</script></body></html>
