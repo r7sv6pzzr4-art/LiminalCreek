@@ -103,6 +103,14 @@ function addFeeling(current,newLabel){
 const COMPARISON_CHOICES=Object.freeze([
   'A','B','equal','neither','different'
 ]);
+// Brief, natural answer labels; the feeling itself appears only once above.
+const COMPARISON_LABELS=Object.freeze({
+  A:'The feeling is stronger at Location A',
+  B:'The feeling is stronger at Location B',
+  equal:'The feeling is about equally strong at both locations',
+  neither:'I don’t sense this feeling at either location',
+  different:'The locations feel different, but neither feels clearly stronger'
+});
 function validateComparisonAnswer({feeling,choice,note=''},{allowedFeelings=[]}={}){
   assert(allowedFeelings.includes(feeling),'Choose one of the listed or newly added feelings');
   assert(COMPARISON_CHOICES.includes(choice),'Invalid comparison answer');
@@ -151,7 +159,7 @@ function createRelativeQuestion({region,referencePoints,eligible,seed,
     question:'At which location is this feeling stronger?',
     feeling,pointA:referenceIsA?reference.slice():newPoint,
     pointB:referenceIsA?newPoint:reference.slice(),
-    choices:COMPARISON_CHOICES.slice(),
+    choices:COMPARISON_CHOICES.map(value=>({value,label:COMPARISON_LABELS[value]})),
     // This client-facing shape deliberately omits source, history,
     // original descriptions, original strength, and original comments.
     personal:true};
