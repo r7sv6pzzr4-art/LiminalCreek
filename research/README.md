@@ -108,3 +108,27 @@ Uses synthetic data, no Supabase calls or personal information.
 - Spatial precision, observer-specific scales, time trends, differences
   in surroundings, and nonuniform adaptive-site inclusion probability
   must be considered in subsequent analysis.
+
+## Administrator-adjustable adaptive percentage (draft)
+
+The administrator may ultimately set **0–100% adaptive** for *future*
+frozen matched batches. At **0%**, every newly selected pair uses broad,
+spatially balanced randomized sampling with no response-informed location
+selection; at **100%**, all newly selected pairs are adaptive. Intermediate
+percentages reserve the complement for broad sampling. The algorithm divides
+the adaptive fraction among potential hotspots (47%), uncertain/disagreeing
+areas (33%), and quiet areas (20%); integer pair counts are rounded within
+each batch. For small batches, percentages are therefore approximate.
+
+The standalone preview is in `research/admin-sampling.html`. It is
+**not** accessible through the currently deployed app and does not save
+settings. When integrated, the control must check the authenticated admin's
+membership on the **server**, use a protected settings RPC, and keep the
+percentage secret from participant screens. A later change to the slider
+must **never** rerun completed or already staged batches; only newly
+generated batches can use a new percentage.
+
+The percentage controls **sampling mix**, not study completion or automatic
+extension. The administrator will separately approve more paired sites and
+close the sampling plan before either person can start personal mapping.
+No existing assignment is touched.
