@@ -168,3 +168,29 @@ not live or usable until a separate, reviewed deployment.
   or merge this branch without those steps.
 
 The existing private daily backup workflow remains independent.
+
+## Participant interface and confirmation safeguards
+
+The shared participant interface (`index.html`, `auth.js`) is unchanged by
+this branch. The administrator screen is an entirely separate page in the
+inactive research folder. Before integration, show its entry only after an
+authenticated server-verified administrator role check. Never load it for or
+provide navigation to non-admin participants. The server, not a hidden tab,
+must prevent non-admin access. No participant will see the administrator
+statistics, planned percentages, staging IDs, or partner's individual results.
+
+**Two different meanings of “release”:**
+1. **Release a new location batch**: append reviewed matched locations to
+   two separate participant queues. The draft admin page now requires opening
+   a separate review panel, then correctly entering the frozen batch UUID;
+   server-side membership/completion/limit/duplicate checks are still required.
+2. **Share/reveal study responses**: future, sensitive and conceptually
+   separate. This is not implemented. Two disabled controls indicate a
+   mandatory *preview of exactly what would be shared* and a separate
+   *verified approval* step. We must agree what is shared, with whom, and when,
+   before implementing any reveal. A simple browser confirm or typed phrase
+   alone is not adequate authentication for actual data disclosure. The
+   final server-side flow should require fresh authentication, a short-lived,
+   single-use confirmation bound to an immutable disclosure manifest, and
+   re-verification of the shared-study closure and both personal phases.
+   Nothing in this branch grants access to private responses.
