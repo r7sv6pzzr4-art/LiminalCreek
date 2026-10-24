@@ -15,6 +15,20 @@ const DEFAULT_MODES=Object.freeze({
 });
 
 function assert(ok,message){if(!ok)throw new Error(message)}
+// Within the adaptive portion, retain all three investigative modes.
+const ADAPTIVE_SUBMODES=Object.freeze({interesting:0.47,uncertain:0.33,quiet:0.20});
+function modesForPercentage(adaptivePercent){
+  assert(Number.isInteger(adaptivePercent)&&adaptivePercent>=0&&adaptivePercent<=100,
+    'Adaptive percentage must be a whole number from 0 to 100');
+  const fraction=adaptivePercent/100;
+  return Object.freeze({
+    interesting:fraction*ADAPTIVE_SUBMODES.interesting,
+    uncertain:fraction*ADAPTIVE_SUBMODES.uncertain,
+    quiet:fraction*ADAPTIVE_SUBMODES.quiet,
+    broad:1-fraction
+  });
+}
+
 function distance(a,b){
   const x=(b[0]-a[0])*RAD*Math.cos((a[1]+b[1])*RAD/2);
   const y=(b[1]-a[1])*RAD;
@@ -140,7 +154,7 @@ function priority(mode,site){
     *(1-Math.min(1,e.interest))+(Number.isFinite(e.closestQuiet)?0.25:0);
   return 1;
 }
-function modeCounts(count,modes){
+function modeCounts(count,effectiveModes){
   const list=Object.entries(modes).map(([mode,fraction])=>({mode,
     count:Math.floor(count*fraction),remainder:count*fraction-Math.floor(count*fraction)}));
   let leftover=count-list.reduce((a,b)=>a+b.count,0);
@@ -169,7 +183,10 @@ function separationFor(mode,evidence,maxMeters){
 }
 function generateBatch(options){
   const {count,bounds,eligible,observations=[],existingPairs=[],batchIndex=1,
-    seed,maxSeparationMeters=60.96,modes=DEFAULT_MODES}=options||{};
+    seed,maxSeparationMeters=60.96,modes,adaptivePercent}=options||{};
+  assert(modes===undefined||adaptivePercent===undefined,
+    'Specify either adaptivePercent or explicit modes, not both');
+  const effectiveModes=adaptivePercent===undefined?(modes||DEFAULT_MODES):modesForPercentage(adaptivePercent);
   assert(Number.isInteger(count)&&count>0&&count<=100,'count must be 1–100');
   assert(Array.isArray(bounds)&&bounds.length===4&&bounds.every(Number.isFinite)
     &&bounds[2]>bounds[0]&&bounds[3]>bounds[1],'Invalid bounds');
@@ -177,9 +194,9 @@ function generateBatch(options){
   assert(typeof seed==='string'||Number.isInteger(seed),'Provide a fixed audit seed');
   assert(Number.isInteger(batchIndex)&&batchIndex>=1,'batchIndex must be positive');
   assert(maxSeparationMeters>0&&maxSeparationMeters<=60.96,'Maximum separation must be at most 200 ft');
-  assert(Object.keys(modes).length===4 &&
-    ['interesting','uncertain','quiet','broad'].every(m=>Number.isFinite(modes[m])&&modes[m]>=0)
-    &&Math.abs(Object.values(modes).reduce((a,b)=>a+b,0)-1)<1e-8,'Invalid mode weights');
+  assert(Object.keys(effectiveModes).length===4 &&
+    ['interesting','uncertain','quiet','broad'].every(m=>Number.isFinite(effectiveModes[m])&&effectiveModes[m]>=0)
+    &&Math.abs(Object.values(effectiveModes).reduce((a,b)=>a+b,0)-1)<1e-8,'Invalid mode weights');
   const obs=normalizedObservations(observations);
   const used=previousPoints(existingPairs);
   const rng=rngFor(seed);
@@ -211,7 +228,7 @@ function generateBatch(options){
     used.push(chosen.point,b);
   }
   return {version:1,batchIndex,seed:String(seed),count:output.length,
-    modes:{...modes},pairs:output,
+    modes:{...effectiveModes},adaptivePercent:adaptivePercent??null,pairs:output,
     // A trusted staging service persists these rows atomically and permanently.
     // Never overwrite a staged batch or write to the live assignments table here.
     staged:true};
@@ -232,5 +249,5 @@ function recommendExtension({observations,remainingPairs=0,maxAdditional=100}){
     status:'planning-estimate-only',
     caveat:'A final study target and plan closure require explicit administrative approval.'};
 }
-const api={generateBatch,recommendExtension,distance,DEFAULT_MODES};
+const api={generateBatch,recommendExtension,distance,DEFAULT_MODES,modesForPercentage};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
