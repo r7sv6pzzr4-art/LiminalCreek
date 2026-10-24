@@ -31,7 +31,8 @@ BEGIN
    ),
    'settings',(SELECT jsonb_build_object(
         'adaptivePercent',sp.adaptive_percent,'batchSize',sp.batch_size,
-        'planClosed',sp.plan_closed,'finalPairCount',sp.final_pair_count
+        'planClosed',sp.plan_closed,'finalPairCount',sp.final_pair_count,
+        'approvedPairLimit',sp.approved_pair_limit
       ) FROM public.liminal_sampling_plans sp WHERE sp.study_id=sid),
    'stagedBatches',(SELECT count(*) FROM public.liminal_adaptive_batches b
                     WHERE b.study_id=sid AND b.state='staged')
@@ -61,6 +62,27 @@ BEGIN
  WHERE study_id=sid;
  -- Settings are only read by the generator when CREATING a future batch.
  RETURN jsonb_build_object('adaptivePercent',p_percent,'batchSize',p_batch_size);
+END $$;
+
+-- Admin explicitly raises the TOTAL number of matched shared pairs allowed.
+-- This is independent of the 0–100% sampling mix; no generation occurs here.
+CREATE OR REPLACE FUNCTION public.liminal_admin_authorize_pairs(p_new_total integer)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
+AS $$
+DECLARE sid uuid; old_limit integer;
+BEGIN
+ SELECT p.study_id INTO sid FROM public.participants p
+ WHERE p.user_id=auth.uid() AND p.is_admin;
+ IF sid IS NULL THEN RAISE EXCEPTION 'Administrator required'; END IF;
+ SELECT sp.approved_pair_limit INTO old_limit
+ FROM public.liminal_sampling_plans sp
+ WHERE sp.study_id=sid AND NOT sp.plan_closed FOR UPDATE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Open sampling plan required'; END IF;
+ IF p_new_total IS NULL OR p_new_total<old_limit OR p_new_total>10000
+ THEN RAISE EXCEPTION 'Total cannot decrease or exceed 10000'; END IF;
+ UPDATE public.liminal_sampling_plans
+ SET approved_pair_limit=p_new_total WHERE study_id=sid;
+ RETURN p_new_total;
 END $$;
 
 -- Promotion accepts NO coordinates from a browser. It reads immutable frozen
@@ -122,6 +144,9 @@ BEGIN
  THEN RAISE EXCEPTION 'Unexpected sequence state'; END IF;
  SELECT count(*) INTO stage_pairs FROM public.liminal_adaptive_pair_staging
  WHERE batch_id=b.id;
+ IF next_a+stage_pairs-1>(SELECT approved_pair_limit
+    FROM public.liminal_sampling_plans WHERE study_id=sid)
+ THEN RAISE EXCEPTION 'Batch exceeds administrator-approved pair limit'; END IF;
  IF stage_pairs<1 OR stage_pairs>30 OR
     (SELECT count(DISTINCT sequence_a) FROM public.liminal_adaptive_pair_staging
      WHERE batch_id=b.id)<>stage_pairs OR
@@ -162,3 +187,15 @@ END $$;
 -- and enforce membership/ownership within every RPC. The administrator
 -- must NOT be given direct SELECT on responses or paired coordinates.
 -- No schema above is live unless explicitly reviewed and executed.
+
+-- SECURITY DEFINER functions are executable by PUBLIC by default unless
+-- REVOKE is explicit. Restrict direct invocation to signed-in users;
+-- each function ALSO checks administrator membership internally.
+REVOKE ALL ON FUNCTION public.liminal_admin_progress() FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.liminal_admin_set_sampling(smallint,smallint) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.liminal_admin_authorize_pairs(integer) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.liminal_admin_release_batch(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.liminal_admin_progress() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.liminal_admin_set_sampling(smallint,smallint) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.liminal_admin_authorize_pairs(integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.liminal_admin_release_batch(uuid) TO authenticated;
