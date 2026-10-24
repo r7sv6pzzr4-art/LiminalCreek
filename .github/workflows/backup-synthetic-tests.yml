@@ -1,0 +1,16 @@
+name: Test study backup recovery (synthetic only)
+on:
+  push:
+    branches:
+      - daily-encrypted-backups-20261023
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  restore-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise archive, restore and exact comment verification with fabricated data
+        run: bash backend/backup/synthetic-restore-test.sh
