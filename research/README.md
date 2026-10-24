@@ -71,9 +71,16 @@ observations after completing the shared study. Regions reflect high
 intensity regardless of type. The displayed boundary is broadened/softened.
 Original exact sites, original intensities, notes, category-by-point
 assignments, and partner observations remain hidden. Suggested feelings
-are not ranked visually. At each new site choose a suggested feeling,
-**Describe a new feeling** (adds a reusable choice immediately),
-or **No particular feeling**, and rate the chosen feeling on **1–10**.
+are not ranked visually. The personal study uses **paired relative comparisons**, not 1–10 ratings.
+Each question presents two dots (one previously sampled reference, one new
+location) and a chosen feeling, asking which feels stronger. Which dot is
+the reference is random and concealed. Answers: A, B, equally strong,
+neither, or different character without a clear stronger choice. **Describe
+a new feeling** adds a reusable choice. Original 1–4 ratings are used only
+to nominate candidate regions and possible feeling labels; after the mini-
+study begins, spatial updates are driven by the comparison responses alone.
+The old ratings must never enter personal-study ranking, weighting, or
+prediction. Personal comparisons remain distinct from shared observations.
 Optional free comments stay separate from original observations.
 
 Personal mapping observations never influence the partner's blinded study.
