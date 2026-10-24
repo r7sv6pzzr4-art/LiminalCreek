@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LiminalCreek · Sampling administration (inactive prototype)</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}
+body{margin:0;background:#10221d;color:#ecf2ed}
+main{max-width:660px;margin:5vh auto;padding:26px;background:#1d382d;border:1px solid #527060;border-radius:18px}
+h1{font-size:1.4rem;margin-top:0}
+label{display:block;margin:23px 0 10px;font-weight:650}
+input[type="range"]{width:100%;accent-color:#a3d5ac}
+input[type="number"]{background:#12271f;border:1px solid #94ad9e;border-radius:8px;color:white;padding:10px;width:85px;font:inherit}
+figure{margin:18px 0 0;display:flex;height:28px;border-radius:9px;overflow:hidden}
+#randomBand{background:#6ab4a4}#adaptiveBand{background:#e2b878}
+.status{color:#bdcfc1;font-size:.9rem;line-height:1.5}
+button{padding:12px 16px;border-radius:10px;background:#a3d5ac;color:#183025;border:0;font-weight:700}
+button:disabled{opacity:.4}
+output{font-size:1.3rem;font-weight:700}
+</style></head>
+<body><main>
+<h1>Sampling administration</h1>
+<p class="status"><strong>INACTIVE PROTOTYPE.</strong> This is a standalone preview, not linked to Supabase or the live LiminalCreek application. Changes here do not save or change study assignments.</p>
+<label for="adaptive">Adaptive sampling in future batches: <output id="percentage">50%</output></label>
+<input type="range" id="adaptive" min="0" max="100" step="5" value="50">
+<figure aria-label="Distribution of future sampling"><div id="randomBand"></div><div id="adaptiveBand"></div></figure>
+<p class="status" id="summary" role="status"></p>
+<label for="batch">Number of new matched pairs per batch</label>
+<input id="batch" type="number" min="1" max="30" step="1" value="12">
+<p class="status">Your selection would affect <strong>future, not yet generated</strong> batches only. Frozen or already assigned sites—and the original 100 pairs—must never be changed. Both participants continue receiving matched pairs, independently shuffled.</p>
+<p class="status">The eventual real control must be available only to the authenticated study administrator and enforced by a private server function. Neither participant will be notified when batches are generated or settings are changed.</p>
+<button type="button" disabled>Save to study — not connected</button>
+</main>
+<script>
+const slider=document.querySelector('#adaptive'),pct=document.querySelector('#percentage'),
+summary=document.querySelector('#summary'),random=document.querySelector('#randomBand'),
+adaptive=document.querySelector('#adaptiveBand');
+function update(){const a=Number(slider.value),r=100-a;pct.textContent=a+'%';
+random.style.width=r+'%';adaptive.style.width=a+'%';
+summary.textContent=a===0?'100% broad, spatially balanced sampling; no response-informed site selection.':
+a===100?'All new pairs are informed by previous observations, including interesting, uncertain, and apparently quiet areas.':
+r+'% broad sampling / '+a+'% response-informed sampling. The precise mix is randomized within each frozen batch.';
+}
+slider.addEventListener('input',update);update();
+</script></body></html>
