@@ -14,7 +14,7 @@ regenerate or renumber the original 100 pairs.**
 
 - Wait for **both participants to complete all their original 100 assigned
   locations**, even though their original order differs.
-- Adaptive generation is private, periodic, and silent. Start with **10–15
+- Adaptive generation is private, periodic, and silent. Start with **20
   matched pairs per frozen batch**, each based on a recorded observation snapshot.
 - Up to **200 ft** between paired locations for broad sampling; reduce
   separation for interesting/uncertain regions when useful.
