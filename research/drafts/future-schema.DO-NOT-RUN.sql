@@ -12,6 +12,7 @@ create table if not exists public.liminal_sampling_plans (
   study_id uuid primary key references public.studies(id) on delete cascade,
   original_pair_count integer not null default 100 check (original_pair_count=100),
   final_pair_count integer check (final_pair_count>=100),
+  approved_pair_limit integer not null default 100 check(approved_pair_limit>=100),
   plan_closed boolean not null default false,
   adaptive_percent smallint not null default 50
     check(adaptive_percent between 0 and 100),
