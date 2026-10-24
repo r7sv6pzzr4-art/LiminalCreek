@@ -139,3 +139,32 @@ The percentage controls **sampling mix**, not study completion or automatic
 extension. The administrator will separately approve more paired sites and
 close the sampling plan before either person can start personal mapping.
 No existing assignment is touched.
+
+## Administrator dashboard and batch release (October 2026 draft)
+
+The branch-only `research/admin-sampling.html` is now wired to proposed
+administrator RPCs defined in `research/drafts/admin-rpcs.DO-NOT-RUN.sql`.
+These RPCs are **not installed in Supabase**. The dashboard is therefore
+not live or usable until a separate, reviewed deployment.
+
+- Administrator-only progress: counts completed/assigned for each participant,
+  including counts from the immutable original 100. Never exposes observations,
+  notes, partner coordinates, or individual impression categories.
+- Future settings: 0–100% adaptive sampling and 1–30 pairs per batch
+  (default 20). Settings change **future batches only**.
+- Explicit study extension: an administrator authorizes the **total number of
+  matched pairs**, initially 100. Merely authorizing does not generate/release
+  anything. A frozen batch cannot exceed the current authorization limit.
+- Batch release: the administrator supplies a reviewed frozen batch UUID.
+  The RPC checks both original 100 queues are complete, verifies stage order,
+  appends the same staged pair identifiers to both participants' queues in
+  separately frozen orders, and marks the batch released atomically.
+- Nothing can be released twice; already assigned and answered points remain
+  untouched. The private coordinator that securely generates and freezes
+  batches from real polygons/observations is still **to be implemented**.
+- A new waiting-for-next-batch state is also needed in the live collection UI
+  before actual activation, along with privacy/regression tests in a
+  disposable Supabase database. Do not install these draft RPCs in production
+  or merge this branch without those steps.
+
+The existing private daily backup workflow remains independent.
