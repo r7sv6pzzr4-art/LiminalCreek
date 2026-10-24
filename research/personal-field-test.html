@@ -17,11 +17,18 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 <header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
 <div id="map"></div>
 <main>
-<section class="panel"><strong>1. Define an entirely separate test area</strong>
+<section class="panel"><strong>1. Study setup — independent field test</strong>
+<p class="tag">Set your test extent here; these tools do not access the real study. The test area is saved only on this device.</p>
+<div class="row"><button id="toggleSetup" type="button" aria-expanded="true">Hide setup controls</button></div>
+<div id="setupFields">
+<label for="basemap">Background map:</label>
+<select id="basemap"><option value="osm">Current OpenStreetMap</option><option value="1930" selected>1930s NJ aerial photography (historic)</option></select>
+<p id="layerStatus" class="tag">Loading optional 1930s layer…</p>
 <p class="tag">Use the polygon tool at the top left of the map (click vertices; click the first point to close), or import an existing GeoJSON Polygon/FeatureCollection. For this sandbox, choose an area away from the original study.</p>
 <input type="file" id="geo" accept=".geojson,.json,application/geo+json,application/json">
 <p id="areaStatus" class="tag">No test area yet. Map is centered arbitrarily until you draw or import an area.</p>
-<div class="row"><button id="clear" type="button">Clear test area</button><button id="reset" type="button">Reset comparison history</button></div>
+<div class="row"><button id="clear" type="button">Clear test area</button><button id="exportArea" type="button">Download test-area GeoJSON</button><button id="reset" type="button">Reset comparison history</button></div>
+</div>
 </section>
 <section class="panel"><strong>2. Choose an impression to compare</strong>
 <p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
@@ -40,8 +47,11 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 <p id="round" class="tag"></p>
 </section>
 <p id="status" role="status"></p>
+<div class="panel"><strong>Field-test records</strong>
+<p class="tag">Your answers are saved on this device, separately from the main LiminalCreek study. Export your JSON file to compare with your brother later. His responses will stay on his device unless he chooses to export them.</p>
+<p class="tag" id="savedCounter">0 comparisons saved locally.</p></div>
 <div class="row"><button id="export">Export anonymous test comparisons (JSON)</button></div>
-<p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until exported; refreshing clears the session. No actual study observations are accessed.</p>
+<p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until explicitly exported or cleared. No actual study observations are accessed.</p>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
@@ -49,10 +59,40 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const map=L.map('map').setView([40.35,-74.10],12);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const baseCurrent=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 const layer=new L.FeatureGroup().addTo(map);
+const historicItem='4e7de8d868c248f99c3fddc5bf8c0386'; // Official NJ 1930s WMS catalog item.
+let baseHistoric=null,baseCurrent=null;
+async function setupHistoric(){
+ try{
+   // Discover the live WMS endpoint from NJ's ArcGIS Online catalog rather
+   // than guessing a server URL. Use names from WMS capabilities.
+   const root='https://www.arcgis.com/sharing/rest/content/items/'+historicItem+'?f=json';
+   const response=await fetch(root);
+   if(!response.ok)throw Error('catalog unavailable');
+   const item=await response.json();
+   if(!item.url||!/^https:\/\//i.test(item.url))throw Error('historical layer URL unavailable');
+   const base=item.url.split('?')[0];
+   const caps=await fetch(base+(base.includes('?')?'&':'?')+'service=WMS&request=GetCapabilities&version=1.1.1');
+   if(!caps.ok)throw Error('historical capabilities unavailable');
+   const xml=new DOMParser().parseFromString(await caps.text(),'text/xml');
+   if(xml.getElementsByTagName('parsererror').length)throw Error('invalid WMS capabilities');
+   const candidates=[...xml.getElementsByTagName('Layer')].map(l=>[...l.children].find(c=>c.localName==='Name')?.textContent).filter(Boolean);
+   if(!candidates.length)throw Error('WMS has no named imagery layer');
+   const wms=new URL(base);
+   const layerName=candidates[0];
+   baseHistoric=L.tileLayer.wms(wms.href,{layers:layerName,format:'image/png',transparent:false,version:'1.1.1',attribution:'NJOGIS / NJDEP · 1930s aerial photography',maxZoom:20});
+   if($('basemap').value==='1930'){map.removeLayer(baseCurrent);baseHistoric.addTo(map);baseHistoric.bringToBack();}
+   $('layerStatus').textContent='1930s New Jersey aerial photography available. Source: NJOGIS / NJDEP.';
+ }catch(e){
+   $('layerStatus').textContent='Historical imagery could not be loaded ('+e.message+'). Current map remains available.';
+   $('basemap').value='osm';
+ }
+}
+
 map.addControl(new L.Control.Draw({edit:{featureGroup:layer,remove:true},draw:{polyline:false,rectangle:false,circle:false,circlemarker:false,marker:false,polygon:{allowIntersection:false,showArea:true}}}));
 let polygons=[],history=[],current=null,markers=[],allSites=[];
+const TEST_KEY='liminal-personal-independent-fieldtest-v2';
 function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[]}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
 const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
@@ -68,9 +108,10 @@ function addPolygonLayer(leafletLayer){
  if(g.type==='Polygon')polygons.push(g.coordinates);
  if(g.type==='MultiPolygon')polygons.push(...g.coordinates);
 }
+function saveLocal(){try{localStorage.setItem(TEST_KEY,JSON.stringify({area:layer.toGeoJSON(),history,allSites}))}catch(e){}$('savedCounter').textContent=history.length+' comparisons saved locally.'}
 function refreshArea(){polygons=[];layer.eachLayer(addPolygonLayer);
 $('areaStatus').textContent=polygons.length?'Eligible area defined; '+polygons.length+' polygon(s).':'No test area yet.';
-$('start').disabled=!polygons.length;history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none'}
+$('start').disabled=!polygons.length;history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none';saveLocal()}
 map.on(L.Draw.Event.CREATED,e=>{layer.addLayer(e.layer);refreshArea();map.fitBounds(layer.getBounds().pad(.12))});
 map.on(L.Draw.Event.EDITED,refreshArea);map.on(L.Draw.Event.DELETED,refreshArea);
 $('geo').onchange=async e=>{
@@ -82,7 +123,7 @@ $('geo').onchange=async e=>{
  }catch(err){$('status').textContent='Import failed: '+err.message}
 };
 $('clear').onclick=()=>{layer.clearLayers();refreshArea()};
-$('reset').onclick=()=>{history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none';$('status').textContent='Comparisons reset; test boundary preserved.'};
+$('reset').onclick=()=>{history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none';saveLocal();$('status').textContent='Comparisons reset; test boundary preserved.'};
 function next(){
  clearMarkers();
  const feeling=$('custom').value.trim()||$('feeling').value;
@@ -113,14 +154,56 @@ document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
  if(!current)return;
  history.push({...current,answer:b.dataset.answer});
  allSites.push(current.A,current.B);
- current=null;
+ saveLocal();current=null;
  $('status').textContent='Response recorded for this test session ('+history.length+' comparisons).';
  next();
 });
 $('export').onclick=()=>{
- const obj={exportVersion:1,isolatedTest:true,area:layer.toGeoJSON(),comparisons:history};
+ const obj={exportVersion:2,isolatedTest:true,area:layer.toGeoJSON(),comparisons:history};
  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminal-personal-test.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
+$('exportArea').onclick=()=>{
+ const data=layer.toGeoJSON();
+ if(!data.features.length){$('status').textContent='Draw a test polygon first.';return}
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/geo+json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='liminal-independent-test-area.geojson';a.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+$('toggleSetup').onclick=()=>{
+ const el=$('setupFields'),hidden=el.hidden;el.hidden=!hidden;
+ $('toggleSetup').textContent=hidden?'Hide setup controls':'Show setup controls';
+ $('toggleSetup').setAttribute('aria-expanded',String(hidden));
+ setTimeout(()=>map.invalidateSize(),100);
+};
+$('basemap').onchange=()=>{
+ if($('basemap').value==='1930'&&!baseHistoric){
+   $('layerStatus').textContent='Historical imagery is not available. Trying NJ imagery catalog…';
+   setupHistoric();return;
+ }
+ if(baseHistoric)map.removeLayer(baseHistoric);
+ if(map.hasLayer(baseCurrent))map.removeLayer(baseCurrent);
+ if($('basemap').value==='1930'&&baseHistoric)baseHistoric.addTo(map).bringToBack();
+ else baseCurrent.addTo(map).bringToBack();
+};
+function restore(){
+ try{
+ const saved=JSON.parse(localStorage.getItem(TEST_KEY)||'null');
+ if(!saved)return;
+ if(saved.area?.type==='FeatureCollection'&&Array.isArray(saved.area.features)){
+   L.geoJSON(saved.area,{onEachFeature:(feature,lyr)=>{if(lyr instanceof L.Polygon)layer.addLayer(lyr)}});
+   if(layer.getLayers().length){refreshArea();map.fitBounds(layer.getBounds().pad(.12));}
+ }
+ if(Array.isArray(saved.history)){
+   history=saved.history.filter(x=>x&&Array.isArray(x.A)&&Array.isArray(x.B)&&typeof x.feeling==='string'
+     &&['A','B','equal','neither','different'].includes(x.answer));
+   allSites=history.flatMap(x=>[x.A,x.B]);
+   $('savedCounter').textContent=history.length+' comparisons saved locally.';
+ }
+ }catch(e){$('status').textContent='Could not restore previous local test session.'}
+}
+restore();
+setupHistoric();
 })();
 </script></body></html>
