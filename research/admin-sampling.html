@@ -39,7 +39,22 @@ output{font-size:1.3rem;font-weight:700}
 <button type="button" id="authorize" disabled>Authorize total shared pairs</button>
 <label for="batchId">Frozen batch ID to release (only after private staging and verification)</label>
 <input id="batchId" type="text" autocomplete="off" placeholder="Batch UUID" style="width:100%;box-sizing:border-box">
-<button type="button" id="release" disabled>Release reviewed frozen batch</button>
+<button type="button" id="release" disabled>Review frozen batch release</button>
+<div class="panel" id="releaseReview" hidden style="background:#152e25;border:1px solid #9da88b;padding:14px;border-radius:12px;margin-top:12px">
+<strong>Separate verification — release new assigned locations</strong>
+<p class="status">This operation adds a previously reviewed batch to both queues. It does not reveal recorded impressions or comments.</p>
+<p id="releaseReviewDetail" class="status"></p>
+<label for="verifyBatch">To confirm, type the batch ID shown above exactly</label>
+<input id="verifyBatch" type="text" autocomplete="off" style="width:100%;box-sizing:border-box">
+<button type="button" id="confirmRelease">Confirm batch release</button>
+<button type="button" id="cancelRelease">Cancel</button>
+</div>
+<div class="panel" style="margin-top:25px;border-top:1px solid #79948a;padding-top:18px">
+<h2>Share study results — future feature</h2>
+<p class="status">The meaning and scope of sharing have not been decided. Releasing data must never occur as part of sampling or batch release.</p>
+<button type="button" disabled>Preview exactly what would be shared — not implemented</button>
+<button type="button" disabled>Verify identity and confirm sharing — not implemented</button>
+</div>
 <p class="status">Release is blocked until the backend confirms that both original 100-location queues are complete. A released batch cannot be released again. This page shows only completion counts and administrative settings—not participants’ impressions or paired coordinates.</p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -60,7 +75,7 @@ const db=window.supabase?.createClient(
   'https://fwdsoluixqeycapncecl.supabase.co',
   'sb_publishable_qoZbnqS3AfGmezZBdYo_vQ_Y4rH1a_6',
   {auth:{persistSession:true,autoRefreshToken:true}});
-let approved=false,closed=true,baselineReady=false;
+let approved=false,closed=true,baselineReady=false,pendingBatch=null;
 async function invoke(name,args={}){
   const {data:{user},error:userError}=await db.auth.getUser();
   if(userError||!user)throw new Error('Sign in through the LiminalCreek app first.');
@@ -116,19 +131,37 @@ authorize.onclick=async()=>{
     await load.onclick();
   }catch(e){progress.textContent='Authorization not saved: '+e.message;authorize.disabled=false;}
 };
-release.onclick=async()=>{
+release.onclick=()=>{
   if(!approved||closed||!baselineReady)return;
   const id=$('batchId').value.trim();
   if(!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)){
     progress.textContent='Enter a valid frozen batch UUID.';return;
   }
-  if(!confirm('Release this previously reviewed frozen batch to BOTH participants?\nThis cannot be undone.'))return;
-  release.disabled=true;
+  pendingBatch=id;
+  $('releaseReviewDetail').textContent='Batch: '+id+
+    '. Final server verification will also check authorization, study readiness, pair count, and duplicate releases.';
+  $('verifyBatch').value='';
+  $('releaseReview').hidden=false;
+};
+$('cancelRelease').onclick=()=>{pendingBatch=null;$('verifyBatch').value='';$('releaseReview').hidden=true;};
+$('confirmRelease').onclick=async()=>{
+  const id=pendingBatch;
+  if(!id||!approved||closed||!baselineReady)return;
+  if($('verifyBatch').value.trim()!==id){
+    progress.textContent='Verification failed: batch ID did not match. Nothing changed.';return;
+  }
+  // Recheck current administrator identity and state at the server; a separate
+  // later process will be required for eventual release of private study data.
+  $('confirmRelease').disabled=true;
   try{
     const result=await invoke('liminal_admin_release_batch',{p_batch_id:id});
     progress.textContent='Batch released: '+result.newPairs+' new matched pairs. Original assignments unchanged.';
   }catch(e){progress.textContent='Batch NOT released: '+e.message;}
-  finally{await load.onclick();}
+  finally{
+    $('confirmRelease').disabled=false;pendingBatch=null;
+    $('verifyBatch').value='';$('releaseReview').hidden=true;
+    await load.onclick();
+  }
 };
 
 </script></body></html>
