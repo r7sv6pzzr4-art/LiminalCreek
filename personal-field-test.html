@@ -15,6 +15,7 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 </style></head><body>
 <header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
 <div id="map"></div>
+<p class="tag" style="margin:8px 0 0;padding:0 18px 8px">1987 aerial photography with 1930s New Jersey aerial imagery underneath where the 1987 image is transparent. The 1930s mosaic is less precisely aligned than the 1987 photograph.</p>
 <main>
 <section class="panel"><strong>Choose an impression to compare</strong>
 <p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
@@ -47,6 +48,15 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 const $=id=>document.getElementById(id);
 const map=L.map('map').setView([40.349,-74.167],16);
 // Use the single 1987 photo: no current OSM tiles flash through transparent edges.
+// NJ 1930s black-and-white aerial mosaic underneath the 1987 photo.
+const historical1930=L.tileLayer.wms('https://img.nj.gov/imagerywms/BlackWhite1930?',{
+  layers:'BlackWhite1930',
+  version:'1.1.1',
+  format:'image/png',
+  transparent:false,
+  maxZoom:20,
+  attribution:'1930s aerial photography: NJ Office of GIS / NJDEP'
+}).addTo(map);
 const layer=new L.FeatureGroup().addTo(map);
 const photoBounds=[[40.346256771,-74.172214460],[40.351719119,-74.162024166]];
 const photoUrl='./trapp-1987.png';
