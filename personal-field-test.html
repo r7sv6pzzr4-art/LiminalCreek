@@ -157,14 +157,15 @@ function drawPoints(){
   const icon=L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:26px;font-weight:bold;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[30,30],iconAnchor:[15,15]});
   markers.push(L.marker([point[1],point[0]],{icon}).addTo(map));
  }
- const target=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]).pad(1.25);
-// Glide gently between nearby sites instead of snapping the map to each pair.
+ const target=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]);
+// Fit A and B into most of the map, with a little breathing room. Avoid Leaflet's
+// flyToBounds zoom-out-then-in arc, which makes each transition feel distant.
 const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const dockHeight=dock.classList.contains('dock-collapsed')?55:Math.min(dock.getBoundingClientRect().height,window.innerHeight*.58);
-const viewOptions={maxZoom:18,paddingTopLeft:[20,20],paddingBottomRight:[20,dockHeight+20]};
+const padding=L.point(86,86); // total screen margin; keep both markers comfortably visible
+const zoom=Math.min(19,map.getBoundsZoom(target,false,padding));
 map.stop();
-if(reduceMotion)map.fitBounds(target,viewOptions);
-else map.flyToBounds(target,{...viewOptions,duration:1.35,easeLinearity:.22});
+map.setView(target.getCenter(),zoom,{animate:!reduceMotion,pan:{animate:!reduceMotion,duration:0.55},zoom:{animate:!reduceMotion}});
+
  $('impression').textContent='“'+current.feeling+'”';$('round').textContent='Comparison '+(history.length+1);
  $('question').style.display='block';
 }
