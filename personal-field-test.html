@@ -145,7 +145,8 @@ $('addFeeling').onclick=addFeeling;
 $('newFeeling').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addFeeling()}});
 function openFeelingModal(purpose){
  modalPurpose=purpose;
- $('feelingTitle').textContent=purpose==='switch'?'Now evaluate another feeling':'Feelings associated with this area';
+ const upcoming=feelingChoices.length?feelingChoices[(Math.max(0,feelingChoices.indexOf(selectedFeeling))+1)%feelingChoices.length]:null;
+ $('feelingTitle').textContent=purpose==='switch'&&upcoming?'Next: '+upcoming:'Feelings associated with this area';
  $('feelingModalDescription').textContent=purpose==='switch'?
  'A change of impression helps keep observations fresh. Review the selected feelings, then continue.' :
  'Which impressions might characterize this landscape? Select several or add your own. We will rotate after 10–20 comparisons of each feeling.';
@@ -163,7 +164,7 @@ $('confirmFeelings').onclick=()=>{
  feelingIndex=modalPurpose==='switch'?(at<0?0:(at+1)%feelingChoices.length):Math.max(0,at);
  blockCount=0;blockGoal=randomBlockSize();pendingFeelingSwitch=false;
  selectedFeeling=feelingChoices[feelingIndex];
- if(!saveLocal()){Object.assign(null||{},{});({feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return}
+ if(!saveLocal()){({feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return}
  $('feelingModal').hidden=true;showSelectedFeeling(selectedFeeling);
  if(!current)next();else{setDockCollapsed(true);drawPoints()}
 };
@@ -252,6 +253,7 @@ $('reset').onclick=()=>{
  clearMarkers();$('question').style.display='none';$('status').textContent='Local test history cleared.';
 };
 function next(){
+ if(!feelingChoices.length&&!current){openFeelingModal('setup');return}
  if(current){drawPoints();$('status').textContent='Finish the saved unanswered comparison before moving on.';return}
  clearMarkers();
  const feeling=selectedFeeling||$('custom').value.trim()||$('feeling').value;
