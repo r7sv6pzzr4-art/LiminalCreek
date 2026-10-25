@@ -12,16 +12,42 @@ button.sel{background:#9bc8a5;color:#183126}select,textarea,input{padding:9px;ba
 #question{display:none}.dots{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px}.a{background:#55b7ec}.b{background:#f1ad65}
 .tag{color:#b2cbbc;font-size:.86em}#impression{font-size:1.17em;font-weight:650}#status{font-size:.9em;color:#c9d9cf}
 code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55px}
+
+/* Full map canvas and swipeable sliding bottom dock, mirroring the shared-study interaction. */
+html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-index:5}
+#map{height:calc(100dvh - 68px)!important;min-height:0}
+#bottomPanel{position:fixed;z-index:900;bottom:0;left:0;right:0;width:100%;max-width:none;
+ margin:0;padding:0;background:#142c25ee;border-top:1px solid #587a66;
+ max-height:min(73dvh,760px);overflow:hidden;transition:max-height .23s ease;
+ box-shadow:0 -8px 24px #06171170}
+#bottomPanel.dock-collapsed{max-height:55px}
+#dockHandle{width:100%;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ gap:6px;background:#142b27;margin:0;border:0;border-radius:0;text-align:center;
+ color:#d5e7d6;font-size:.87rem;touch-action:pan-y;user-select:none;cursor:grab}
+#dockGrip{width:48px;height:5px;border-radius:8px;background:#a3b8a9}
+#dockContent{overflow-y:auto;max-height:calc(min(73dvh,760px) - 55px);
+ max-width:900px;margin:auto;padding:5px 16px 35px;overscroll-behavior:contain}
+#selectionSummary strong{display:block;line-height:1.4;margin-bottom:6px}
+#selectionSummary button{font-size:.88rem;padding:9px;margin-bottom:0;background:#203e34}
+#impressionChooser[hidden],#selectionSummary[hidden]{display:none!important}
+#question{margin-top:6px}
+@media(max-height:600px){#bottomPanel{max-height:82dvh}#dockContent{max-height:calc(82dvh - 55px)}}
 </style></head><body>
 <header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
 <div id="map"></div>
-<p class="tag" style="margin:8px 0 0;padding:0 18px 8px">1987 aerial photography with 1930s New Jersey aerial imagery underneath where the 1987 image is transparent. The 1930s mosaic is less precisely aligned than the 1987 photograph.</p>
-<main>
-<section class="panel"><strong>Choose an impression to compare</strong>
+
+<main id="bottomPanel" class="dock-collapsed">
+<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Show comparison ↑</span></button>
+<div id="dockContent">
+<div id="selectionSummary" class="panel" hidden>
+<strong id="currentImpression"></strong>
+<button id="changeImpression" type="button">Change impression to evaluate</button>
+</div>
+<section class="panel" id="impressionChooser"><strong>Choose an impression to compare</strong>
 <p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
 <select id="feeling"><option>Feels imprinted with human happiness</option><option>Feels creepy or haunted</option><option>A pleasant sense of melancholy or wistfulness</option><option>A haunting sense of emptiness, solitude, or something lost</option><option>Feels spiritually unwelcoming</option></select>
 <label for="custom">Or enter a custom impression:</label> <input id="custom" placeholder="An impression in your own words" style="width:100%">
-<button id="start" disabled>Present a comparison</button>
+<button id="start" disabled>Start evaluating this impression</button>
 </section>
 <section class="panel" id="question">
 <p>This area may be associated with the following impression:</p><p id="impression"></p>
@@ -41,7 +67,7 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 <button id="reset" type="button">Clear comparison history (confirmation required)</button></div>
 <div class="row"><button id="export">Export anonymous test comparisons (JSON)</button></div>
 <p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until explicitly exported or cleared. No actual study observations are accessed.</p>
-</main>
+</div></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (()=>{'use strict';
@@ -65,6 +91,35 @@ const photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:fals
 photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 photograph. Please reload.'});
 let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
 const TEST_KEY='liminal-personal-independent-fieldtest-v2';
+const PREF_KEY='liminal-personal-selected-feeling-v1';
+let selectedFeeling=null;
+const dock=$('bottomPanel'),dockHandle=$('dockHandle');
+function setDockCollapsed(collapsed){
+ dock.classList.toggle('dock-collapsed',collapsed);
+ dockHandle.setAttribute('aria-expanded',String(!collapsed));
+ $('dockCaption').textContent=collapsed?'Show comparison ↑':'Hide comparison ↓';
+ setTimeout(()=>map.invalidateSize(),240);
+}
+dockHandle.onclick=()=>{if(dockHandle.dataset.swiped)return;setDockCollapsed(!dock.classList.contains('dock-collapsed'))};
+let touchY=null;
+dockHandle.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY},{passive:true});
+dockHandle.addEventListener('touchend',e=>{if(touchY===null)return;const dy=e.changedTouches[0].clientY-touchY;touchY=null;if(Math.abs(dy)>32){setDockCollapsed(dy>0);dockHandle.dataset.swiped='1';setTimeout(()=>delete dockHandle.dataset.swiped,120)}},{passive:true});
+function showSelectedFeeling(feeling){
+ selectedFeeling=feeling;
+ $('currentImpression').textContent='Evaluating: '+feeling;
+ $('selectionSummary').hidden=false;
+ $('impressionChooser').hidden=true;
+ try{localStorage.setItem(PREF_KEY,feeling)}catch(e){}
+}
+$('changeImpression').onclick=()=>{
+ if(current){
+  $('status').textContent='Finish your current pair first. You can change impressions after recording your answer.';
+  setDockCollapsed(false);return;
+ }
+ $('impressionChooser').hidden=false;
+ $('selectionSummary').hidden=true;
+ setDockCollapsed(false);
+};
 function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[]}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
 const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
@@ -104,7 +159,7 @@ $('reset').onclick=()=>{
 function next(){
  if(current){drawPoints();$('status').textContent='Finish the saved unanswered comparison before moving on.';return}
  clearMarkers();
- const feeling=$('custom').value.trim()||$('feeling').value;
+ const feeling=selectedFeeling||$('custom').value.trim()||$('feeling').value;
  const relevant=history.filter(h=>h.feeling===feeling);
  let reference=null;
  // Choose previous winners frequently, plus exploration to avoid lock-in.
@@ -119,17 +174,19 @@ function next(){
  const swapped=Math.random()<.5;
  current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
  if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
+ showSelectedFeeling(feeling);
  drawPoints();
- $('status').textContent='Choose the answer that best reflects your impression.';
+ setDockCollapsed(true);
+ $('status').textContent='Compare locations A and B, then open the dock to record your answer.';
 }
-$('start').onclick=next;
+$('start').onclick=()=>{if(!current){selectedFeeling=$('custom').value.trim()||$('feeling').value;}next()};
 document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
  if(!current)return;
  const pending=current;
  history.push({...pending,answer:b.dataset.answer,respondedAt:new Date().toISOString()});
  allSites.push(pending.A,pending.B);current=null;
  if(!saveLocal()){history.pop();allSites.splice(-2);current=pending;drawPoints();return}
- $('status').textContent='Response recorded for this test session ('+history.length+' comparisons).';
+ $('status').textContent='Response saved ('+history.length+' comparisons).';
  next();
 });
 $('export').onclick=()=>{
@@ -148,7 +205,14 @@ function restore(){
    allSites=history.flatMap(x=>[x.A,x.B]);
    if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string')current=saved.current;
   }
-  if(current)drawPoints();else map.fitBounds(photoBounds);
+  if(current){
+   showSelectedFeeling(current.feeling);
+   drawPoints();
+ }else{
+   map.fitBounds(photoBounds);
+   try{const previous=localStorage.getItem(PREF_KEY);if(previous)showSelectedFeeling(previous)}catch(e){}
+ }
+ setDockCollapsed(true);
   saveLocal();
   $('status').textContent=history.length+' previous comparisons restored.';
  }catch(e){
