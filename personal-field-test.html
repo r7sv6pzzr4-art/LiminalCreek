@@ -129,9 +129,12 @@ photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 phot
 let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
 const TEST_KEY='liminal-personal-independent-fieldtest-v2';
 const PREF_KEY='liminal-personal-selected-feeling-v1';
-const DEFAULT_FEELINGS=['Feels imprinted with human happiness','Feels creepy or haunted',
- 'A pleasant sense of melancholy or wistfulness','A haunting sense of emptiness, solitude, or something lost',
- 'Feels spiritually unwelcoming'];
+const DEFAULT_FEELINGS=[
+ 'Feels creepy or haunted',
+ 'Feels imprinted with human happiness',
+ 'Feels imprinted with human sadness or fear',
+ 'A haunting sense of emptiness, solitude, or something lost'
+];
 let feelingChoices=[],feelingIndex=0,blockCount=0,blockGoal=0,pendingFeelingSwitch=false,modalPurpose='setup';
 const randomBlockSize=()=>10+Math.floor(Math.random()*11);
 function renderFeelingList(){
