@@ -241,9 +241,6 @@ function showSelectedFeeling(feeling){
  selectedFeeling=feeling;
  $('headerFeelingText').textContent=feeling;
  $('headerFeeling').title=feeling;
- $('currentImpression').textContent='Evaluating: '+feeling;
- $('selectionSummary').hidden=false;
- $('impressionChooser').hidden=true;
  try{localStorage.setItem(PREF_KEY,feeling)}catch(e){}
 }
 $('manageFeelings').onclick=()=>{
@@ -361,11 +358,11 @@ function next(){
  if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
  showSelectedFeeling(feeling);
  setDockCollapsed(true);
- $('selectionSummary').hidden=true;
+
  drawPoints();
  $('status').textContent='Tap the stronger dot, or open the dock for other answers.';
 }
-$('start').onclick=()=>{if(!current){selectedFeeling=$('custom').value.trim()||$('feeling').value;}next()};
+
 let recording=false;
 function submitAnswer(answer){
  if(!current||recording||!['A','B','equal','neither','different'].includes(answer))return;
@@ -436,10 +433,10 @@ function restore(){
   }
  }catch(e){
   $('status').textContent='Saved history could not be restored: '+e.message+'. Do not reset browser data.';
-  $('start').disabled=true;
+
  }
 }
-$('start').disabled=false;
+
 restore();
 // The opening feelings dock must remain expanded until the user retracts it.
 })();
