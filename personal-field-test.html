@@ -61,8 +61,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 #bottomPanel.feeling-mode #dockHandle{color:#e7f4e4}
 #feelingList{padding:4px 0}
 
+
+#headerFeeling{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+#headerFeeling .feelingLabel{font-size:.68rem;font-weight:500;letter-spacing:.03em;color:#adc9b9;text-transform:uppercase;line-height:1.1}
+#headerFeelingText{font-size:1.08rem;line-height:1.16;font-weight:750;color:#f1f8e9}
+@media(max-width:430px){#headerFeelingText{font-size:.96rem}#headerFeeling .feelingLabel{font-size:.61rem}}
 </style></head><body>
-<header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Current impression">Choose an impression</div></header>
+<header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Feeling being mapped"><span class="feelingLabel">Mapping the feeling</span><span id="headerFeelingText">Choose an impression</span></div></header>
 <div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
 
 <main id="bottomPanel" class="dock-collapsed">
@@ -164,7 +169,7 @@ function openFeelingModal(purpose){
  $('feelingError').textContent='';renderFeelingList();$('feelingModal').hidden=false;
  dock.classList.add('feeling-mode');
  setDockCollapsed(false);
- $('headerFeeling').textContent=purpose==='switch'?'Changing impression':'Choose impressions';
+ $('headerFeelingText').textContent=purpose==='switch'?'Changing impression':'Choose impressions';
  $('dockContent').scrollTop=0;
 }
 $('confirmFeelings').onclick=()=>{
@@ -198,7 +203,7 @@ dockHandle.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY},{passi
 dockHandle.addEventListener('touchend',e=>{if(touchY===null)return;const dy=e.changedTouches[0].clientY-touchY;touchY=null;if(Math.abs(dy)>32){setDockCollapsed(dy>0);dockHandle.dataset.swiped='1';setTimeout(()=>delete dockHandle.dataset.swiped,120)}},{passive:true});
 function showSelectedFeeling(feeling){
  selectedFeeling=feeling;
- $('headerFeeling').textContent=feeling;
+ $('headerFeelingText').textContent=feeling;
  $('headerFeeling').title=feeling;
  $('currentImpression').textContent='Evaluating: '+feeling;
  $('selectionSummary').hidden=false;
