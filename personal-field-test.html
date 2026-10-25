@@ -68,8 +68,9 @@ let baseHistoric=null;
 const photoBounds=[[40.346256771, -74.172214460],[40.351719119, -74.162024166]];
 let photoLayer=null;
 const photoUrl='./trapp-1987.png';
+const defaultBoundary={"type":"Polygon","coordinates":[[[-74.16300101,40.35164991],[-74.16749526,40.35153085],[-74.17003977,40.35072433],[-74.17037696,40.34978073],[-74.17074535,40.34880369],[-74.17091493,40.34860965],[-74.17133054,40.34808744],[-74.1718584,40.34738087],[-74.1719082,40.34726676],[-74.17221006,40.34632964],[-74.1708432,40.34656224],[-74.17028287,40.34668615],[-74.16876724,40.34685033],[-74.16650083,40.34723802],[-74.16483454,40.34748522],[-74.16395252,40.34764718],[-74.16335668,40.34779437],[-74.16206858,40.34805774],[-74.16300101,40.35164991]]]};
 function activatePhoto(){
-  if(photoLayer){if(!map.hasLayer(photoLayer))photoLayer.addTo(map);photoLayer.bringToFront();return}
+  if(photoLayer){if(!map.hasLayer(photoLayer))photoLayer.addTo(map);photoLayer.bringToBack();return}
   photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:false,alt:'Georeferenced Trapp 1987 aerial photograph'});
   photoLayer.on('error',()=>{
     if(map.hasLayer(photoLayer))map.removeLayer(photoLayer);
@@ -77,7 +78,7 @@ function activatePhoto(){
     $('layerStatus').textContent='1987 photo is not uploaded to GitHub Pages yet. OpenStreetMap is available; setup still works.';
   });
   photoLayer.on('load',()=>{$('layerStatus').textContent='1987 historical aerial imagery loaded. Draw or import your test boundary.'});
-  photoLayer.addTo(map);
+  photoLayer.addTo(map).bringToBack();
   map.fitBounds(photoBounds);
 }
 
@@ -229,6 +230,11 @@ function restore(){
  }catch(e){$('status').textContent='Could not restore previous local test session.'}
 }
 restore();
+if(!polygons.length){
+ L.geoJSON(defaultBoundary,{onEachFeature:(feature,lyr)=>{if(lyr instanceof L.Polygon)layer.addLayer(lyr)}});
+ refreshArea();
+ $('areaStatus').textContent='Initial boundary derived from the 1987 image coverage. Edit the polygon to refine the actual testing region.';
+}
 if(!polygons.length)map.fitBounds(photoBounds);
 activatePhoto();
 // Historical WMS fallback is optional, never required for setup.
