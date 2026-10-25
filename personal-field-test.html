@@ -33,12 +33,25 @@ html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-ind
 #question{margin-top:6px}
 #switchFeelingInQuestion{font-size:.84rem;padding:8px 10px;margin-top:18px;background:#193a30}
 @media(max-height:600px){#bottomPanel{max-height:82dvh}#dockContent{max-height:calc(82dvh - 55px)}}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px}
+#brand{min-width:0;flex:1}#brand h1{font-size:1.06rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#brand small{font-size:.68rem;display:block}
+#headerFeeling{font-size:.79rem;line-height:1.3;font-weight:600;color:#eaf5ce;text-align:right;
+ max-width:46%;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
+ -webkit-box-orient:vertical;overflow-wrap:anywhere}
+#mapInstruction{position:fixed;top:77px;left:50%;transform:translateX(-50%);z-index:850;
+ background:#142d26df;color:#ecf5e9;border:1px solid #9cb3a4;border-radius:20px;
+ padding:8px 14px;font-size:.84rem;line-height:1.4;text-align:center;
+ width:max-content;max-width:calc(100vw - 28px);pointer-events:none;box-shadow:0 2px 8px #001b1644}
+#mapInstruction[hidden]{display:none}#mapInstruction span{color:#b9d2c0;white-space:nowrap}
+@media(max-width:430px){#brand small{display:none}#headerFeeling{font-size:.73rem;max-width:48%}}
 </style></head><body>
-<header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
-<div id="map"></div>
+<header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Current impression">Choose an impression</div></header>
+<div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
 
 <main id="bottomPanel" class="dock-collapsed">
-<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Show comparison ↑</span></button>
+<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Other answers / change impression ↑</span></button>
 <div id="dockContent">
 <div id="selectionSummary" class="panel" hidden>
 <strong id="currentImpression"></strong>
@@ -98,7 +111,7 @@ const dock=$('bottomPanel'),dockHandle=$('dockHandle');
 function setDockCollapsed(collapsed){
  dock.classList.toggle('dock-collapsed',collapsed);
  dockHandle.setAttribute('aria-expanded',String(!collapsed));
- $('dockCaption').textContent=collapsed?'Show comparison ↑':'Hide comparison ↓';
+ $('dockCaption').textContent=collapsed?'Other answers / change impression ↑':'Hide options ↓';
  setTimeout(()=>map.invalidateSize(),240);
 }
 dockHandle.onclick=()=>{if(dockHandle.dataset.swiped)return;setDockCollapsed(!dock.classList.contains('dock-collapsed'))};
@@ -107,6 +120,8 @@ dockHandle.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY},{passi
 dockHandle.addEventListener('touchend',e=>{if(touchY===null)return;const dy=e.changedTouches[0].clientY-touchY;touchY=null;if(Math.abs(dy)>32){setDockCollapsed(dy>0);dockHandle.dataset.swiped='1';setTimeout(()=>delete dockHandle.dataset.swiped,120)}},{passive:true});
 function showSelectedFeeling(feeling){
  selectedFeeling=feeling;
+ $('headerFeeling').textContent=feeling;
+ $('headerFeeling').title=feeling;
  $('currentImpression').textContent='Evaluating: '+feeling;
  $('selectionSummary').hidden=false;
  $('impressionChooser').hidden=true;
@@ -120,6 +135,8 @@ $('switchFeelingInQuestion').onclick=()=>{
  clearMarkers();$('question').style.display='none';
  $('selectionSummary').hidden=true;$('impressionChooser').hidden=false;
  setDockCollapsed(false);
+ $('headerFeeling').textContent='Choose an impression';
+ $('mapInstruction').hidden=true;
  $('status').textContent='Choose a different impression. Saved answers are preserved.';
 };
 $('changeImpression').onclick=()=>{
@@ -131,7 +148,7 @@ $('changeImpression').onclick=()=>{
  $('selectionSummary').hidden=true;
  setDockCollapsed(false);
 };
-function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[]}
+function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];$('mapInstruction').hidden=true}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
 const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
 function allowed(p){return polygons.some(rings=>ringInside(p,rings[0])&&!rings.slice(1).some(h=>ringInside(p,h)))}
@@ -154,8 +171,10 @@ function saveLocal(){
 function drawPoints(){
  clearMarkers();if(!current)return;
  for(const [point,letter,color] of [[current.A,'A','#55b7ec'],[current.B,'B','#f1ad65']]){
-  const icon=L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:26px;font-weight:bold;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[30,30],iconAnchor:[15,15]});
-  markers.push(L.marker([point[1],point[0]],{icon}).addTo(map));
+  const icon=L.divIcon({className:'',html:'<div style="width:44px;height:44px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:40px;font-weight:bold;font-size:19px;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[44,44],iconAnchor:[22,22]});
+  const marker=L.marker([point[1],point[0]],{icon,keyboard:true,title:'Location '+letter+': stronger feeling'});
+  marker.on('click',()=>submitAnswer(letter));
+  markers.push(marker.addTo(map));
  }
  const target=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]);
 // Fit A and B into most of the map, with a little breathing room. Avoid Leaflet's
@@ -168,6 +187,7 @@ map.setView(target.getCenter(),zoom,{animate:!reduceMotion,pan:{animate:!reduceM
 
  $('impression').textContent='“'+current.feeling+'”';$('round').textContent='Comparison '+(history.length+1);
  $('question').style.display='block';
+ $('mapInstruction').hidden=false;
 }
 $('reset').onclick=()=>{
  if(!confirm('Permanently clear saved comparison history on this device? Export a copy first.'))return;
@@ -194,27 +214,27 @@ function next(){
  current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
  if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
  showSelectedFeeling(feeling);
- // First pair: collapse so the map can be explored. Subsequent pairs: leave
- // the questions visible so each response flows straight into the next.
- const firstPair=history.length===0;
- setDockCollapsed(firstPair);
+ setDockCollapsed(true);
  $('selectionSummary').hidden=true;
  drawPoints();
- if(!firstPair)$('dockContent').scrollTop=0;
- $('status').textContent=firstPair?'Open the dock when ready to answer.':'Response saved. Compare the new pair.';
+ $('status').textContent='Tap the stronger dot, or open the dock for other answers.';
 }
 $('start').onclick=()=>{if(!current){selectedFeeling=$('custom').value.trim()||$('feeling').value;}next()};
-document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
- if(!current)return;
+let recording=false;
+function submitAnswer(answer){
+ if(!current||recording||!['A','B','equal','neither','different'].includes(answer))return;
+ recording=true;
  const pending=current;
- history.push({...pending,answer:b.dataset.answer,respondedAt:new Date().toISOString()});
+ history.push({...pending,answer,respondedAt:new Date().toISOString()});
  allSites.push(pending.A,pending.B);current=null;
- if(!saveLocal()){history.pop();allSites.splice(-2);current=pending;drawPoints();return}
- // A successful response immediately yields the next pair, with the dock kept open
- // for rapid successive judgments. Never advance if saving fails.
+ if(!saveLocal()){
+  history.pop();allSites.splice(-2);current=pending;drawPoints();recording=false;return;
+ }
  $('status').textContent='Response saved ('+history.length+' comparisons).';
+ recording=false;
  next();
-});
+}
+document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>submitAnswer(b.dataset.answer));
 $('export').onclick=()=>{
  const obj={exportVersion:3,isolatedTest:true,area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
@@ -248,5 +268,6 @@ function restore(){
 }
 $('start').disabled=false;
 restore();
+if(!selectedFeeling&&!current)setDockCollapsed(false);
 })();
 </script></body></html>
