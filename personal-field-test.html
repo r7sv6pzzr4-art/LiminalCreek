@@ -48,16 +48,26 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 @media(max-width:430px){#brand small{display:none}#headerFeeling{font-size:.95rem;max-width:58%}}
 
 #feelingModal[hidden]{display:none}
-#feelingModal{position:fixed;inset:0;z-index:1600;background:#071611cc;display:flex;align-items:center;justify-content:center;padding:16px}
-#feelingDialog{background:#1b392e;color:#edf5e9;width:min(520px,100%);max-height:87dvh;overflow-y:auto;border:1px solid #83a493;border-radius:14px;padding:20px}
+#feelingModal{display:block;margin:0;padding:0;background:transparent}
+#feelingDialog{background:#1b392e;color:#edf5e9;width:100%;max-width:720px;margin:0 auto;
+ border:1px solid #83a493;border-radius:12px;padding:16px}
 #feelingDialog h2{margin:0 0 8px;font-size:1.35rem}
 #feelingList label{display:flex;align-items:flex-start;gap:12px;line-height:1.3;margin:8px 0;padding:7px;border-radius:7px;cursor:pointer}
 #feelingList label:has(input:checked){background:#325d49}
 #feelingList input{width:20px;height:20px;margin:0;flex:none;accent-color:#a4cfac}
 #feelingDialog .row input{flex:1;min-width:0}#feelingDialog .row button{min-width:72px;flex:none}
 #feelingDialog p{color:#d2e4d6;font-size:.9rem}
+#bottomPanel.feeling-mode #dockContent > :not(#feelingModal){display:none!important}
+#bottomPanel.feeling-mode #dockHandle{color:#e7f4e4}
+#feelingList{padding:4px 0}
+
 </style></head><body>
 <header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Current impression">Choose an impression</div></header>
+<div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
+
+<main id="bottomPanel" class="dock-collapsed">
+<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Other answers / change impression ↑</span></button>
+<div id="dockContent">
 <div id="feelingModal" hidden>
 <div id="feelingDialog" role="dialog" aria-modal="true" aria-labelledby="feelingTitle">
 <h2 id="feelingTitle">Feelings associated with this area</h2>
@@ -65,11 +75,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 <label for="newFeeling">Add another impression</label>
 <div class="row"><input id="newFeeling" maxlength="160" placeholder="Describe a feeling…"><button id="addFeeling" type="button">Add</button></div>
 <p id="feelingError" role="alert"></p><button id="confirmFeelings" type="button">Begin comparisons</button>
-</div></div><div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
-
-<main id="bottomPanel" class="dock-collapsed">
-<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Other answers / change impression ↑</span></button>
-<div id="dockContent">
+</div></div>
 <div id="selectionSummary" class="panel" hidden>
 <strong id="currentImpression"></strong>
 <div class="row"><button id="nextComparison" type="button">Present next comparison</button><button id="changeImpression" type="button">Change impression to evaluate</button></div>
@@ -152,8 +158,10 @@ function openFeelingModal(purpose){
  'Which impressions might characterize this landscape? Select several or add your own. We will rotate after 10–20 comparisons of each feeling.';
  $('confirmFeelings').textContent=purpose==='switch'?'Continue with next feeling':'Begin comparisons';
  $('feelingError').textContent='';renderFeelingList();$('feelingModal').hidden=false;
+ dock.classList.add('feeling-mode');
+ setDockCollapsed(false);
  $('headerFeeling').textContent=purpose==='switch'?'Changing impression':'Choose impressions';
- setTimeout(()=>$('confirmFeelings').focus(),0);
+ $('dockContent').scrollTop=0;
 }
 $('confirmFeelings').onclick=()=>{
  const choices=[...$('feelingList').querySelectorAll('input:checked')].map(x=>x.value);
@@ -165,7 +173,8 @@ $('confirmFeelings').onclick=()=>{
  blockCount=0;blockGoal=randomBlockSize();pendingFeelingSwitch=false;
  selectedFeeling=feelingChoices[feelingIndex];
  if(!saveLocal()){({feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return}
- $('feelingModal').hidden=true;showSelectedFeeling(selectedFeeling);
+ $('feelingModal').hidden=true;dock.classList.remove('feeling-mode');
+ showSelectedFeeling(selectedFeeling);
  if(!current)next();else{setDockCollapsed(true);drawPoints()}
 };
 
@@ -174,7 +183,9 @@ const dock=$('bottomPanel'),dockHandle=$('dockHandle');
 function setDockCollapsed(collapsed){
  dock.classList.toggle('dock-collapsed',collapsed);
  dockHandle.setAttribute('aria-expanded',String(!collapsed));
- $('dockCaption').textContent=collapsed?'Other answers / change impression ↑':'Hide options ↓';
+ $('dockCaption').textContent=dock.classList.contains('feeling-mode')?
+   (collapsed?'Choose area impressions ↑':'View the map ↓'):
+   (collapsed?'Other answers / change impression ↑':'Hide options ↓');
  setTimeout(()=>map.invalidateSize(),240);
 }
 dockHandle.onclick=()=>{if(dockHandle.dataset.swiped)return;setDockCollapsed(!dock.classList.contains('dock-collapsed'))};
