@@ -267,6 +267,32 @@ $('reset').onclick=()=>{
  history=[];current=null;allSites=[];if(!saveLocal()){history=oldHistory;current=oldCurrent;allSites=oldSites;return}
  clearMarkers();$('question').style.display='none';$('status').textContent='Local test history cleared.';
 };
+// Avoid repeatedly showing the same location. Recent sites have a larger
+// exclusion radius; older sites get a smaller one, preserving future coverage.
+function pickUnderexploredPoint(center=null,radius=150,other=null){
+ const recent=history.slice(-12).flatMap(h=>[h.A,h.B]).filter(allowed);
+ const older=history.slice(0,-12).flatMap(h=>[h.A,h.B]).filter(allowed);
+ let winner=null,best=-Infinity;
+ for(let i=0;i<65;i++){
+  const p=randomPoint(center,radius);
+  if(!p||other&&d(p,other)<20)continue;
+  const recentDistance=recent.length?Math.min(...recent.map(q=>d(p,q))):100;
+  const olderDistance=older.length?Math.min(...older.map(q=>d(p,q))):100;
+  if(recentDistance<20||olderDistance<6)continue;
+  // A little randomness prevents a rigid grid of points.
+  const score=Math.min(recentDistance,75)+.22*Math.min(olderDistance,65)+Math.random()*24;
+  if(score>best){winner=p;best=score}
+ }
+ if(winner)return winner;
+ // In a small area, relax spacing rather than presenting the same exact dot.
+ for(let i=0;i<250;i++){
+  const p=randomPoint(center,radius);
+  if(p&&(!other||d(p,other)>=16)
+     &&recent.every(q=>d(p,q)>=9)
+     &&older.every(q=>d(p,q)>=3))return p;
+ }
+ return null;
+}
 function next(){
  if(!feelingChoices.length&&!current){openFeelingModal('setup');return}
  if(current){drawPoints();$('status').textContent='Finish the saved unanswered comparison before moving on.';return}
@@ -274,15 +300,22 @@ function next(){
  const feeling=selectedFeeling||$('custom').value.trim()||$('feeling').value;
  const relevant=history.filter(h=>h.feeling===feeling);
  let reference=null;
- // Choose previous winners frequently, plus exploration to avoid lock-in.
- const winners=relevant.filter(h=>h.answer==='A'||h.answer==='B').map(h=>h.answer==='A'?h.A:h.B).filter(allowed);
- if(winners.length&&Math.random()<.7)reference=winners[Math.floor(Math.random()*winners.length)];
- if(!reference){const eligibleSites=allSites.filter(allowed);reference=eligibleSites.length&&Math.random()<.5?eligibleSites[Math.floor(Math.random()*eligibleSites.length)]:randomPoint();}
- let fresh=null;
- const near=reference&&Math.random()<.68;
- if(near)fresh=randomPoint(reference,80+Math.random()*200);
- if(!fresh||d(reference,fresh)<12)fresh=randomPoint();
- if(!reference||!fresh||d(reference,fresh)<12){$('status').textContent='Area too narrow for two distinct sites. Enlarge the polygon.';return}
+ // Revisit earlier strong sites occasionally only after a substantial break.
+ // Formerly ~70% of pairs recycled an earlier winner, causing obvious repetition.
+ if(relevant.length>=10&&Math.random()<.12){
+  const recent=history.slice(-15).flatMap(h=>[h.A,h.B]);
+  const winners=relevant.filter(h=>h.answer==='A'||h.answer==='B')
+   .map(h=>h.answer==='A'?h.A:h.B)
+   .filter(p=>allowed(p)&&recent.every(q=>d(p,q)>=20));
+  if(winners.length)reference=winners[Math.floor(Math.random()*winners.length)];
+ }
+ if(!reference)reference=pickUnderexploredPoint();
+ // Mix local comparisons with broad comparisons across the test polygon.
+ let fresh=reference&&Math.random()<.55?pickUnderexploredPoint(reference,90+Math.random()*140,reference):null;
+ if(!fresh)fresh=pickUnderexploredPoint(null,150,reference);
+ if(!reference||!fresh||d(reference,fresh)<16){
+  $('status').textContent='Could not generate sufficiently distinct sites; please try again.';return;
+ }
  const swapped=Math.random()<.5;
  current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
  if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
