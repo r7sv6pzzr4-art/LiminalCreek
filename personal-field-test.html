@@ -298,7 +298,7 @@ $('reset').onclick=()=>{
  }
  try{localStorage.removeItem(PREF_KEY)}catch(e){}
  clearMarkers();
-$('impressionChooser').hidden=false;
+
  map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
  $('status').textContent='Test reset. Choose the feelings to explore.';
  openFeelingModal('setup');
@@ -333,7 +333,7 @@ function next(){
  if(!feelingChoices.length&&!current){openFeelingModal('setup');return}
  if(current){drawPoints();$('status').textContent='Finish the saved unanswered comparison before moving on.';return}
  clearMarkers();
- const feeling=selectedFeeling||$('custom').value.trim()||$('feeling').value;
+ const feeling=selectedFeeling||feelingChoices[Math.max(0,feelingIndex)];
  const relevant=history.filter(h=>h.feeling===feeling);
  let reference=null;
  // Revisit earlier strong sites occasionally only after a substantial break.
