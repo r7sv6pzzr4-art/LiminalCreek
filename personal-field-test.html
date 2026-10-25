@@ -37,18 +37,35 @@ html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-ind
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px}
 #brand{min-width:0;flex:1}#brand h1{font-size:1.06rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #brand small{font-size:.68rem;display:block}
-#headerFeeling{font-size:.79rem;line-height:1.3;font-weight:600;color:#eaf5ce;text-align:right;
- max-width:46%;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
+#headerFeeling{font-size:1.08rem;line-height:1.3;font-weight:600;color:#eaf5ce;text-align:right;
+ max-width:55%;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
  -webkit-box-orient:vertical;overflow-wrap:anywhere}
 #mapInstruction{position:fixed;top:77px;left:50%;transform:translateX(-50%);z-index:850;
  background:#142d26df;color:#ecf5e9;border:1px solid #9cb3a4;border-radius:20px;
  padding:8px 14px;font-size:.84rem;line-height:1.4;text-align:center;
  width:max-content;max-width:calc(100vw - 28px);pointer-events:none;box-shadow:0 2px 8px #001b1644}
 #mapInstruction[hidden]{display:none}#mapInstruction span{color:#b9d2c0;white-space:nowrap}
-@media(max-width:430px){#brand small{display:none}#headerFeeling{font-size:.73rem;max-width:48%}}
+@media(max-width:430px){#brand small{display:none}#headerFeeling{font-size:.95rem;max-width:58%}}
+
+#feelingModal[hidden]{display:none}
+#feelingModal{position:fixed;inset:0;z-index:1600;background:#071611cc;display:flex;align-items:center;justify-content:center;padding:16px}
+#feelingDialog{background:#1b392e;color:#edf5e9;width:min(520px,100%);max-height:87dvh;overflow-y:auto;border:1px solid #83a493;border-radius:14px;padding:20px}
+#feelingDialog h2{margin:0 0 8px;font-size:1.35rem}
+#feelingList label{display:flex;align-items:flex-start;gap:12px;line-height:1.3;margin:8px 0;padding:7px;border-radius:7px;cursor:pointer}
+#feelingList label:has(input:checked){background:#325d49}
+#feelingList input{width:20px;height:20px;margin:0;flex:none;accent-color:#a4cfac}
+#feelingDialog .row input{flex:1;min-width:0}#feelingDialog .row button{min-width:72px;flex:none}
+#feelingDialog p{color:#d2e4d6;font-size:.9rem}
 </style></head><body>
 <header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Current impression">Choose an impression</div></header>
-<div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
+<div id="feelingModal" hidden>
+<div id="feelingDialog" role="dialog" aria-modal="true" aria-labelledby="feelingTitle">
+<h2 id="feelingTitle">Feelings associated with this area</h2>
+<p id="feelingModalDescription"></p><div id="feelingList"></div>
+<label for="newFeeling">Add another impression</label>
+<div class="row"><input id="newFeeling" maxlength="160" placeholder="Describe a feeling…"><button id="addFeeling" type="button">Add</button></div>
+<p id="feelingError" role="alert"></p><button id="confirmFeelings" type="button">Begin comparisons</button>
+</div></div><div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
 
 <main id="bottomPanel" class="dock-collapsed">
 <button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Other answers / change impression ↑</span></button>
@@ -106,6 +123,51 @@ photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 phot
 let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
 const TEST_KEY='liminal-personal-independent-fieldtest-v2';
 const PREF_KEY='liminal-personal-selected-feeling-v1';
+const DEFAULT_FEELINGS=['Feels imprinted with human happiness','Feels creepy or haunted',
+ 'A pleasant sense of melancholy or wistfulness','A haunting sense of emptiness, solitude, or something lost',
+ 'Feels spiritually unwelcoming'];
+let feelingChoices=[],feelingIndex=0,blockCount=0,blockGoal=0,pendingFeelingSwitch=false,modalPurpose='setup';
+const randomBlockSize=()=>10+Math.floor(Math.random()*11);
+function renderFeelingList(){
+ const list=$('feelingList');list.replaceChildren();
+ for(const feeling of new Set([...DEFAULT_FEELINGS,...feelingChoices])){
+  const label=document.createElement('label'),input=document.createElement('input');
+  input.type='checkbox';input.value=feeling;input.checked=feelingChoices.includes(feeling);
+  label.append(input,document.createTextNode(feeling));list.append(label);
+ }
+}
+function addFeeling(){
+ const value=$('newFeeling').value.trim().slice(0,160);if(!value)return;
+ if(!feelingChoices.includes(value))feelingChoices.push(value);
+ $('newFeeling').value='';$('feelingError').textContent='';renderFeelingList();
+}
+$('addFeeling').onclick=addFeeling;
+$('newFeeling').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addFeeling()}});
+function openFeelingModal(purpose){
+ modalPurpose=purpose;
+ $('feelingTitle').textContent=purpose==='switch'?'Now evaluate another feeling':'Feelings associated with this area';
+ $('feelingModalDescription').textContent=purpose==='switch'?
+ 'A change of impression helps keep observations fresh. Review the selected feelings, then continue.' :
+ 'Which impressions might characterize this landscape? Select several or add your own. We will rotate after 10–20 comparisons of each feeling.';
+ $('confirmFeelings').textContent=purpose==='switch'?'Continue with next feeling':'Begin comparisons';
+ $('feelingError').textContent='';renderFeelingList();$('feelingModal').hidden=false;
+ $('headerFeeling').textContent=purpose==='switch'?'Changing impression':'Choose impressions';
+ setTimeout(()=>$('confirmFeelings').focus(),0);
+}
+$('confirmFeelings').onclick=()=>{
+ const choices=[...$('feelingList').querySelectorAll('input:checked')].map(x=>x.value);
+ if(!choices.length){$('feelingError').textContent='Select at least one feeling.';return}
+ const old={feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling};
+ const previous=selectedFeeling;feelingChoices=[...new Set(choices)];
+ const at=feelingChoices.indexOf(previous);
+ feelingIndex=modalPurpose==='switch'?(at<0?0:(at+1)%feelingChoices.length):Math.max(0,at);
+ blockCount=0;blockGoal=randomBlockSize();pendingFeelingSwitch=false;
+ selectedFeeling=feelingChoices[feelingIndex];
+ if(!saveLocal()){Object.assign(null||{},{});({feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return}
+ $('feelingModal').hidden=true;showSelectedFeeling(selectedFeeling);
+ if(!current)next();else{setDockCollapsed(true);drawPoints()}
+};
+
 let selectedFeeling=null;
 const dock=$('bottomPanel'),dockHandle=$('dockHandle');
 function setDockCollapsed(collapsed){
@@ -132,21 +194,15 @@ $('switchFeelingInQuestion').onclick=()=>{
  if(current&&!confirm('Discard this unanswered pair and change the impression? Your completed answers will remain saved.'))return;
  const previous=current;current=null;
  if(!saveLocal()){current=previous;return}
- clearMarkers();$('question').style.display='none';
- $('selectionSummary').hidden=true;$('impressionChooser').hidden=false;
- setDockCollapsed(false);
- $('headerFeeling').textContent='Choose an impression';
- $('mapInstruction').hidden=true;
- $('status').textContent='Choose a different impression. Saved answers are preserved.';
+ clearMarkers();$('question').style.display='none';setDockCollapsed(true);
+ openFeelingModal('switch');
 };
 $('changeImpression').onclick=()=>{
  if(current){
   $('status').textContent='Finish your current pair first. You can change impressions after recording your answer.';
   setDockCollapsed(false);return;
  }
- $('impressionChooser').hidden=false;
- $('selectionSummary').hidden=true;
- setDockCollapsed(false);
+ openFeelingModal('switch');
 };
 function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];$('mapInstruction').hidden=true}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
@@ -160,7 +216,7 @@ else p=[w+Math.random()*(e-w),s+Math.random()*(n-s)];
 if(allowed(p))return p;}return null}
 function saveLocal(){
  try{
-  localStorage.setItem(TEST_KEY,JSON.stringify({version:3,history,current,allSites,updatedAt:new Date().toISOString()}));
+  localStorage.setItem(TEST_KEY,JSON.stringify({version:4,history,current,allSites,feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,updatedAt:new Date().toISOString()}));
   const check=JSON.parse(localStorage.getItem(TEST_KEY));
   if(check.history.length!==history.length)throw Error('Saved count mismatch');
   $('savedCounter').textContent=history.length+' saved comparisons'+(current?' · unanswered comparison saved':'')+'.';
@@ -226,17 +282,20 @@ function submitAnswer(answer){
  recording=true;
  const pending=current;
  history.push({...pending,answer,respondedAt:new Date().toISOString()});
- allSites.push(pending.A,pending.B);current=null;
+ allSites.push(pending.A,pending.B);current=null;blockCount++;
+ if(feelingChoices.length>1&&blockCount>=blockGoal)pendingFeelingSwitch=true;
  if(!saveLocal()){
-  history.pop();allSites.splice(-2);current=pending;drawPoints();recording=false;return;
+  history.pop();allSites.splice(-2);current=pending;blockCount--;pendingFeelingSwitch=false;drawPoints();recording=false;return;
  }
  $('status').textContent='Response saved ('+history.length+' comparisons).';
  recording=false;
- next();
+ if(pendingFeelingSwitch){
+  clearMarkers();$('question').style.display='none';setDockCollapsed(true);openFeelingModal('switch');
+ }else next();
 }
 document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>submitAnswer(b.dataset.answer));
 $('export').onclick=()=>{
- const obj={exportVersion:3,isolatedTest:true,area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
+ const obj={exportVersion:4,isolatedTest:true,feelings:feelingChoices,rotation:{feelingIndex,blockCount,blockGoal,pendingFeelingSwitch},area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminal-personal-test.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
@@ -250,6 +309,11 @@ function restore(){
       &&['A','B','equal','neither','different'].includes(x.answer));
    allSites=history.flatMap(x=>[x.A,x.B]);
    if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string')current=saved.current;
+   if(Array.isArray(saved.feelingChoices))feelingChoices=saved.feelingChoices.filter(x=>typeof x==='string'&&x.trim()).slice(0,40);
+   feelingIndex=Math.max(0,Math.min(feelingChoices.length-1,Number(saved.feelingIndex)||0));
+   blockCount=Math.max(0,Number(saved.blockCount)||0);blockGoal=Math.max(0,Number(saved.blockGoal)||0);
+   pendingFeelingSwitch=!!saved.pendingFeelingSwitch;
+   if(feelingChoices.length&&!blockGoal)blockGoal=randomBlockSize();
   }
   if(current){
    showSelectedFeeling(current.feeling);
@@ -261,6 +325,8 @@ function restore(){
  setDockCollapsed(true);
   saveLocal();
   $('status').textContent=history.length+' previous comparisons restored.';
+  if(pendingFeelingSwitch){clearMarkers();$('question').style.display='none';openFeelingModal('switch')}
+  else if(!feelingChoices.length&&!current)openFeelingModal('setup');
  }catch(e){
   $('status').textContent='Saved history could not be restored: '+e.message+'. Do not reset browser data.';
   $('start').disabled=true;
@@ -268,6 +334,6 @@ function restore(){
 }
 $('start').disabled=false;
 restore();
-if(!selectedFeeling&&!current)setDockCollapsed(false);
+if(!selectedFeeling&&!current)setDockCollapsed(true);
 })();
 </script></body></html>
