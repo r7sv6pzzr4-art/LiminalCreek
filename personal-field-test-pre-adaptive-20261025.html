@@ -1,0 +1,443 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek — isolated personal comparison field test</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#132b25;color:#e9eee7;font:16px system-ui}header{padding:12px 18px;background:#193b30}h1{font:1.4em Georgia,serif;margin:0}small{color:#c5d4ca}#map{height:53dvh;min-height:300px;background:#2c483f}
+main{max-width:900px;margin:auto;padding:14px 18px 60px}h2{font:1.2em Georgia,serif}
+button,select,input,textarea{font:inherit}button{display:block;width:100%;margin:8px 0;padding:12px;border:1px solid #729989;border-radius:9px;background:#275446;color:#f8fff8;text-align:left;cursor:pointer}
+button:hover{background:#396e59}button:disabled{opacity:.45;cursor:default}
+button.sel{background:#9bc8a5;color:#183126}select,textarea,input{padding:9px;background:#10231e;color:white;border:1px solid #6e9583;border-radius:7px;max-width:100%}
+.panel{background:#1e3b31;border:1px solid #496e5b;padding:12px 15px;border-radius:12px;margin:12px 0}
+.row{display:flex;gap:9px;flex-wrap:wrap}.row button{width:auto;flex:1;min-width:140px}
+#question{display:none}.dots{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px}.a{background:#55b7ec}.b{background:#f1ad65}
+.tag{color:#b2cbbc;font-size:.86em}#impression{font-size:1.17em;font-weight:650}#status{font-size:.9em;color:#c9d9cf}
+code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55px}
+
+/* Full map canvas and swipeable sliding bottom dock, mirroring the shared-study interaction. */
+html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-index:5}
+#map{height:calc(100dvh - 68px)!important;min-height:0}
+#bottomPanel{position:fixed;z-index:900;bottom:0;left:0;right:0;width:100%;max-width:none;
+ margin:0;padding:0;background:#142c25ee;border-top:1px solid #587a66;
+ max-height:min(73dvh,760px);overflow:hidden;transition:max-height .23s ease;
+ box-shadow:0 -8px 24px #06171170}
+#bottomPanel.dock-collapsed{max-height:55px}
+#dockHandle{width:100%;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+ gap:6px;background:#142b27;margin:0;border:0;border-radius:0;text-align:center;
+ color:#d5e7d6;font-size:.87rem;touch-action:pan-y;user-select:none;cursor:grab}
+#dockGrip{width:48px;height:5px;border-radius:8px;background:#a3b8a9}
+#dockContent{overflow-y:auto;max-height:calc(min(73dvh,760px) - 55px);
+ max-width:900px;margin:auto;padding:5px 16px 35px;overscroll-behavior:contain}
+#selectionSummary strong{display:block;line-height:1.4;margin-bottom:6px}
+#selectionSummary button{font-size:.88rem;padding:9px;margin-bottom:0;background:#203e34}
+#impressionChooser[hidden],#selectionSummary[hidden]{display:none!important}
+#question{margin-top:6px}
+#switchFeelingInQuestion{font-size:.84rem;padding:8px 10px;margin-top:18px;background:#193a30}
+@media(max-height:600px){#bottomPanel{max-height:82dvh}#dockContent{max-height:calc(82dvh - 55px)}}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px}
+#brand{min-width:0;flex:1}#brand h1{font-size:1.06rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#brand small{font-size:.68rem;display:block}
+#headerFeeling{font-size:1.08rem;line-height:1.3;font-weight:600;color:#eaf5ce;text-align:right;
+ max-width:55%;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;
+ -webkit-box-orient:vertical;overflow-wrap:anywhere}
+#mapInstruction{position:fixed;top:77px;left:50%;transform:translateX(-50%);z-index:850;
+ background:#142d26df;color:#ecf5e9;border:1px solid #9cb3a4;border-radius:20px;
+ padding:8px 14px;font-size:.84rem;line-height:1.4;text-align:center;
+ width:max-content;max-width:calc(100vw - 28px);pointer-events:none;box-shadow:0 2px 8px #001b1644}
+#mapInstruction[hidden]{display:none}#mapInstruction span{color:#b9d2c0;white-space:nowrap}
+@media(max-width:430px){#brand small{display:none}#headerFeeling{font-size:.95rem;max-width:58%}}
+
+#feelingModal[hidden]{display:none}
+#feelingModal{display:block;margin:0;padding:0;background:transparent}
+#feelingDialog{background:#1b392e;color:#edf5e9;width:100%;max-width:720px;margin:0 auto;
+ border:1px solid #83a493;border-radius:12px;padding:16px}
+#feelingDialog h2{margin:0 0 8px;font-size:1.35rem}
+#feelingList label{display:flex;align-items:flex-start;gap:12px;line-height:1.3;margin:8px 0;padding:7px;border-radius:7px;cursor:pointer}
+#feelingList label:has(input:checked){background:#325d49}
+#feelingList input{width:20px;height:20px;margin:0;flex:none;accent-color:#a4cfac}
+#feelingDialog .row input{flex:1;min-width:0}#feelingDialog .row button{min-width:72px;flex:none}
+#feelingDialog p{color:#d2e4d6;font-size:.9rem}
+#bottomPanel.feeling-mode #dockContent > :not(#feelingModal){display:none!important}
+#bottomPanel.feeling-mode #dockHandle{color:#e7f4e4}
+#feelingList{padding:4px 0}
+
+
+#headerFeeling{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+#headerFeeling .feelingLabel{font-size:.68rem;font-weight:500;letter-spacing:.03em;color:#adc9b9;text-transform:uppercase;line-height:1.1}
+#headerFeelingText{font-size:1.08rem;line-height:1.16;font-weight:750;color:#f1f8e9}
+@media(max-width:430px){#headerFeelingText{font-size:.96rem}#headerFeeling .feelingLabel{font-size:.61rem}}
+
+#rotationNotice[hidden]{display:none}
+#rotationNotice{position:fixed;inset:0;z-index:2000;background:#061a14b8;display:flex;
+ align-items:center;justify-content:center;padding:20px}
+#rotationCard{width:min(450px,100%);background:#1c3e31;color:#edf4eb;
+ border:1px solid #96b5a3;border-radius:16px;box-shadow:0 18px 46px #061a14b0;
+ padding:25px;text-align:center}
+#rotationTitle{text-transform:uppercase;letter-spacing:.08em;font-size:.81rem;color:#b3c9ba}
+#rotationFeeling{font:600 clamp(1.2rem,4.5vw,1.6rem)/1.35 Georgia,serif;margin:16px 0 24px}
+#rotationOK{text-align:center;font-weight:700;margin:0}
+
+#mapInstruction{pointer-events:auto;top:auto;bottom:67px;width:min(610px,calc(100vw - 18px));max-width:none;transform:translateX(-50%);border-radius:14px;display:flex;flex-direction:column;gap:7px;background:#142d26ee}
+#mapInstruction strong{font-size:.9rem}
+.quickChoices{display:flex;gap:7px;width:100%}.quickChoices button{flex:1;min-width:0;text-align:center;font-size:.82rem;line-height:1.25;padding:10px 6px;margin:0;background:#315645}
+#nextFeelingWrap[hidden],#nextFeelingSelect[hidden]{display:none}
+#nextFeelingWrap:not([hidden]){display:block;margin:10px 0 5px}
+@media(max-width:370px){.quickChoices button{font-size:.74rem;padding:8px 4px}}
+</style></head><body>
+<header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Feeling being mapped"><span class="feelingLabel">Mapping the feeling</span><span id="headerFeelingText">Choose an impression</span></div></header>
+<div id="rotationNotice" hidden role="dialog" aria-modal="true" aria-labelledby="rotationTitle">
+ <div id="rotationCard"><div id="rotationTitle">Now testing</div><div id="rotationFeeling"></div>
+ <button id="rotationOK" type="button">OK</button></div></div>
+<div id="map"></div><div id="mapInstruction" role="group" aria-label="Compare two locations" hidden><strong>Tap the dot where the feeling is stronger</strong><div class="quickChoices"><button type="button" id="quickEqual">≈ Both are similar</button><button type="button" id="quickNeither">∅ Neither associated with the feeling</button></div></div>
+
+<main id="bottomPanel" class="dock-collapsed">
+<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Manage feelings / export ↑</span></button>
+<div id="dockContent">
+<div id="feelingModal" hidden>
+<div id="feelingDialog" role="dialog" aria-modal="true" aria-labelledby="feelingTitle">
+<h2 id="feelingTitle">Feelings associated with this area</h2>
+<p id="feelingModalDescription"></p><div id="feelingList"></div>
+<label for="newFeeling">Add another impression</label>
+<div class="row"><input id="newFeeling" maxlength="160" placeholder="Describe a feeling…"><button id="addFeeling" type="button">Add</button></div>
+<label id="nextFeelingWrap" for="nextFeelingSelect" hidden>Feeling to evaluate next</label><select id="nextFeelingSelect" hidden style="width:100%"></select><p id="feelingError" role="alert"></p><button id="confirmFeelings" type="button">Begin comparisons</button>
+</div></div>
+<section class="panel" id="managePanel"><strong>Manage test feelings</strong><p class="tag">Change, add, or remove feelings. Completed comparisons are preserved.</p><button type="button" id="manageFeelings">Edit / change feelings</button></section>
+<p id="status" role="status"></p>
+<div class="panel"><strong>Field-test records</strong>
+<p class="tag">Your responses and the next unanswered question are saved locally. Export a JSON backup before clearing browser data or changing devices. Your brother has his own separate history.</p>
+<p class="tag" id="savedCounter">Loading saved responses…</p>
+<p class="tag" id="saveHealth" role="status">Responses are kept on this device. Export a JSON backup periodically.</p>
+<button id="reset" type="button">Clear comparison history (confirmation required)</button></div>
+<div class="row"><button id="export">Export anonymous test comparisons (JSON)</button></div>
+<p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until explicitly exported or cleared. No actual study observations are accessed.</p>
+</div></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const map=L.map('map').setView([40.349,-74.167],16);
+// Use the single 1987 photo: no current OSM tiles flash through transparent edges.
+// NJ 1930s black-and-white aerial mosaic underneath the 1987 photo.
+const historical1930=L.tileLayer.wms('https://img.nj.gov/imagerywms/BlackWhite1930?',{
+  layers:'BlackWhite1930',
+  version:'1.1.1',
+  format:'image/png',
+  transparent:false,
+  maxZoom:20,
+  attribution:'1930s aerial photography: NJ Office of GIS / NJDEP'
+}).addTo(map);
+const layer=new L.FeatureGroup().addTo(map);
+const photoBounds=[[40.346256771,-74.172214460],[40.351719119,-74.162024166]];
+const photoUrl='./trapp-1987.png';
+const defaultBoundary={"type":"Polygon","coordinates":[[[-74.16754493287007,40.34707234002636],[-74.16773535318367,40.348214796349694],[-74.16726431600652,40.34935249153645],[-74.16627984935174,40.35018280864308],[-74.1652773177937,40.350525264902736],[-74.16387925328081,40.350754426055246],[-74.1630269713535,40.349643985455984],[-74.1625542009098,40.34796561219721],[-74.16405443770545,40.347614420457916],[-74.16567546636871,40.3473691903959],[-74.16681484472115,40.34719054204395],[-74.16679187871617,40.34719621603167],[-74.16754493287007,40.34707234002636]]]};
+const photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:false,alt:'1987 aerial photograph'}).addTo(map);
+photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 photograph. Please reload.'});
+let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
+L.geoJSON(defaultBoundary,{style:{color:'#d9ecb0',weight:2,opacity:.72,fill:false,interactive:false}}).addTo(map);
+const TEST_KEY='liminal-personal-independent-fieldtest-v2';
+const PREF_KEY='liminal-personal-selected-feeling-v1';
+const DEFAULT_FEELINGS=[
+ 'Feels creepy or haunted',
+ 'Feels imprinted with human happiness',
+ 'Feels imprinted with human sadness or fear',
+ 'A haunting sense of emptiness, solitude, or something lost'
+];
+let feelingChoices=[],feelingIndex=0,blockCount=0,blockGoal=0,pendingFeelingSwitch=false,modalPurpose='setup';
+const randomBlockSize=()=>10+Math.floor(Math.random()*11);
+const MAX_PAIR_METERS=152.4; // 500 feet
+function renderFeelingList(){
+ const list=$('feelingList');list.replaceChildren();
+ for(const feeling of new Set([...DEFAULT_FEELINGS,...feelingChoices])){
+  const label=document.createElement('label'),input=document.createElement('input');
+  input.type='checkbox';input.value=feeling;input.checked=feelingChoices.includes(feeling);
+  label.append(input,document.createTextNode(feeling));list.append(label);
+ }
+ updateNextChoices();
+}
+function updateNextChoices(){
+ const select=$('nextFeelingSelect'),previous=select.value;
+ const choices=[...$('feelingList').querySelectorAll('input:checked')].map(x=>x.value);
+ select.replaceChildren();
+ for(const feeling of choices){const opt=document.createElement('option');opt.value=feeling;opt.textContent=feeling;select.append(opt)}
+ if(choices.length)select.value=choices.includes(previous)?previous:choices.includes(selectedFeeling)?selectedFeeling:choices[0];
+}
+$('feelingList').onchange=updateNextChoices;
+function addFeeling(){
+ const value=$('newFeeling').value.trim().slice(0,160);if(!value)return;
+ if(!feelingChoices.includes(value))feelingChoices.push(value);
+ $('newFeeling').value='';$('feelingError').textContent='';renderFeelingList();
+}
+$('addFeeling').onclick=addFeeling;
+$('newFeeling').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addFeeling()}});
+function showRotationNotice(){
+ if(!feelingChoices.length)return;
+ const nextIndex=(Math.max(0,feelingIndex)+1)%feelingChoices.length;
+ $('rotationFeeling').textContent=feelingChoices[nextIndex];
+ $('rotationNotice').hidden=false;
+ setDockCollapsed(true);
+ setTimeout(()=>$('rotationOK').focus(),0);
+}
+$('rotationOK').onclick=()=>{
+ if(!pendingFeelingSwitch)return;
+ const old={feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling};
+ feelingIndex=(Math.max(0,feelingIndex)+1)%feelingChoices.length;
+ blockCount=0;blockGoal=randomBlockSize();pendingFeelingSwitch=false;
+ selectedFeeling=feelingChoices[feelingIndex];
+ if(!saveLocal()){
+  ({feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return;
+ }
+ $('rotationNotice').hidden=true;
+ showSelectedFeeling(selectedFeeling);
+ next();
+};
+function openFeelingModal(purpose){
+ modalPurpose=purpose;
+ const upcoming=feelingChoices.length?feelingChoices[(Math.max(0,feelingChoices.indexOf(selectedFeeling))+1)%feelingChoices.length]:null;
+ $('feelingTitle').textContent=purpose==='switch'&&upcoming?'Next: '+upcoming:'Feelings associated with this area';
+ $('feelingModalDescription').textContent=purpose==='switch'?
+ 'A change of impression helps keep observations fresh. Review the selected feelings, then continue.' :
+ 'Which impressions might characterize this landscape? Select several or add your own. We will rotate after 10–20 comparisons of each feeling.';
+ $('confirmFeelings').textContent=purpose==='setup'?'Begin comparisons':'Apply changes';
+ $('nextFeelingWrap').hidden=purpose!=='manage';
+ $('nextFeelingSelect').hidden=purpose!=='manage';
+ $('feelingError').textContent='';renderFeelingList();$('feelingModal').hidden=false;
+ dock.classList.add('feeling-mode');
+ setDockCollapsed(false);
+ $('headerFeelingText').textContent=purpose==='switch'?'Changing impression':'Choose impressions';
+ $('dockContent').scrollTop=0;
+}
+$('confirmFeelings').onclick=()=>{
+ const choices=[...$('feelingList').querySelectorAll('input:checked')].map(x=>x.value);
+ if(!choices.length){$('feelingError').textContent='Select at least one feeling.';return}
+ const old={feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling};
+ const previous=selectedFeeling;feelingChoices=[...new Set(choices)];
+ const at=feelingChoices.indexOf(previous);
+ feelingIndex=modalPurpose==='manage'?
+   Math.max(0,feelingChoices.indexOf($('nextFeelingSelect').value)):
+   modalPurpose==='switch'?(at<0?0:(at+1)%feelingChoices.length):Math.max(0,at);
+ blockCount=0;blockGoal=randomBlockSize();pendingFeelingSwitch=false;
+ selectedFeeling=feelingChoices[feelingIndex];
+ if(!saveLocal()){({feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return}
+ $('feelingModal').hidden=true;dock.classList.remove('feeling-mode');
+ showSelectedFeeling(selectedFeeling);
+ if(!current)next();else{setDockCollapsed(true);drawPoints()}
+};
+
+let selectedFeeling=null;
+const dock=$('bottomPanel'),dockHandle=$('dockHandle');
+function setDockCollapsed(collapsed){
+ dock.classList.toggle('dock-collapsed',collapsed);
+ dockHandle.setAttribute('aria-expanded',String(!collapsed));
+ $('dockCaption').textContent=dock.classList.contains('feeling-mode')?
+   (collapsed?'Choose area impressions ↑':'View the map ↓'):
+   (collapsed?'Manage feelings / export ↑':'Close settings ↓');
+ setTimeout(()=>map.invalidateSize(),240);
+}
+dockHandle.onclick=()=>{if(dockHandle.dataset.swiped)return;setDockCollapsed(!dock.classList.contains('dock-collapsed'))};
+let touchY=null;
+dockHandle.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY},{passive:true});
+dockHandle.addEventListener('touchend',e=>{if(touchY===null)return;const dy=e.changedTouches[0].clientY-touchY;touchY=null;if(Math.abs(dy)>32){setDockCollapsed(dy>0);dockHandle.dataset.swiped='1';setTimeout(()=>delete dockHandle.dataset.swiped,120)}},{passive:true});
+function showSelectedFeeling(feeling){
+ selectedFeeling=feeling;
+ $('headerFeelingText').textContent=feeling;
+ $('headerFeeling').title=feeling;
+ try{localStorage.setItem(PREF_KEY,feeling)}catch(e){}
+}
+$('manageFeelings').onclick=()=>{
+ if(current&&!confirm('Discard the unanswered pair to edit feelings? Completed answers are preserved.'))return;
+ const previous=current;current=null;
+ if(!saveLocal()){current=previous;return}
+ clearMarkers();openFeelingModal('manage');
+};
+function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];$('mapInstruction').hidden=true}
+function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
+function allowed(p){return polygons.some(rings=>ringInside(p,rings[0])&&!rings.slice(1).some(h=>ringInside(p,h)))}
+function bounds(){const pts=polygons.flatMap(r=>r[0]);return [Math.min(...pts.map(p=>p[0])),Math.min(...pts.map(p=>p[1])),Math.max(...pts.map(p=>p[0])),Math.max(...pts.map(p=>p[1]))]}
+function d(a,b){const dy=(a[1]-b[1])*111195,dx=(a[0]-b[0])*111195*Math.cos((a[1]+b[1])*Math.PI/360);return Math.hypot(dx,dy)}
+function randomPoint(center=null,radius=150){const [w,s,e,n]=bounds();
+for(let i=0;i<5000;i++){let p;if(center){const theta=Math.random()*2*Math.PI,r=Math.sqrt(Math.random())*radius;p=[center[0]+r*Math.cos(theta)/(111195*Math.cos(center[1]*Math.PI/180)),center[1]+r*Math.sin(theta)/111195]}
+else p=[w+Math.random()*(e-w),s+Math.random()*(n-s)];
+if(allowed(p))return p;}return null}
+function saveLocal(){
+ try{
+  localStorage.setItem(TEST_KEY,JSON.stringify({version:4,history,current,allSites,feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,updatedAt:new Date().toISOString()}));
+  const check=JSON.parse(localStorage.getItem(TEST_KEY));
+  if(check.history.length!==history.length)throw Error('Saved count mismatch');
+  $('savedCounter').textContent=history.length+' saved comparisons'+(current?' · unanswered comparison saved':'')+'.';
+  $('saveHealth').textContent='Saved locally and verified. Export periodically as a second copy.';
+  return true;
+ }catch(e){$('saveHealth').textContent='WARNING: Could not verify saving ('+e.message+'). Export immediately before closing the page.';return false}
+}
+function drawPoints(){
+ clearMarkers();if(!current)return;
+ for(const [point,letter,color] of [[current.A,'A','#55b7ec'],[current.B,'B','#f1ad65']]){
+  const icon=L.divIcon({className:'',html:'<div style="width:44px;height:44px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:40px;font-weight:bold;font-size:19px;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[44,44],iconAnchor:[22,22]});
+  const marker=L.marker([point[1],point[0]],{icon,keyboard:true,title:'Location '+letter+': stronger feeling'});
+  marker.on('click',()=>submitAnswer(letter));
+  markers.push(marker.addTo(map));
+ }
+ const target=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]);
+// Fit A and B into most of the map, with a little breathing room. Avoid Leaflet's
+// flyToBounds zoom-out-then-in arc, which makes each transition feel distant.
+const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const padding=L.point(86,86); // total screen margin; keep both markers comfortably visible
+const zoom=Math.min(19,map.getBoundsZoom(target,false,padding));
+map.stop();
+map.setView(target.getCenter(),zoom,{animate:!reduceMotion,pan:{animate:!reduceMotion,duration:0.55},zoom:{animate:!reduceMotion}});
+
+ $('mapInstruction').hidden=false;
+}
+$('reset').onclick=()=>{
+ if(!confirm('Clear all field-test answers and return to the opening feeling-selection screen? Export a JSON backup first.'))return;
+ const previous={history,current,allSites,feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling};
+ history=[];current=null;allSites=[];feelingChoices=[];feelingIndex=0;blockCount=0;blockGoal=0;pendingFeelingSwitch=false;selectedFeeling=null;
+ if(!saveLocal()){
+  ({history,current,allSites,feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=previous);
+  return;
+ }
+ try{localStorage.removeItem(PREF_KEY)}catch(e){}
+ clearMarkers();
+
+ map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
+ $('status').textContent='Test reset. Choose the feelings to explore.';
+ openFeelingModal('setup');
+};
+// Avoid repeatedly showing the same location. Recent sites have a larger
+// exclusion radius; older sites get a smaller one, preserving future coverage.
+function pickUnderexploredPoint(center=null,radius=150,other=null){
+ const recent=history.slice(-12).flatMap(h=>[h.A,h.B]).filter(allowed);
+ const older=history.slice(0,-12).flatMap(h=>[h.A,h.B]).filter(allowed);
+ let winner=null,best=-Infinity;
+ for(let i=0;i<65;i++){
+  const p=randomPoint(center,radius);
+  if(!p||other&&(d(p,other)<20||d(p,other)>MAX_PAIR_METERS))continue;
+  const recentDistance=recent.length?Math.min(...recent.map(q=>d(p,q))):100;
+  const olderDistance=older.length?Math.min(...older.map(q=>d(p,q))):100;
+  if(recentDistance<20||olderDistance<6)continue;
+  // A little randomness prevents a rigid grid of points.
+  const score=Math.min(recentDistance,75)+.22*Math.min(olderDistance,65)+Math.random()*24;
+  if(score>best){winner=p;best=score}
+ }
+ if(winner)return winner;
+ // In a small area, relax spacing rather than presenting the same exact dot.
+ for(let i=0;i<250;i++){
+  const p=randomPoint(center,radius);
+  if(p&&(!other||(d(p,other)>=16&&d(p,other)<=MAX_PAIR_METERS))
+     &&recent.every(q=>d(p,q)>=9)
+     &&older.every(q=>d(p,q)>=3))return p;
+ }
+ return null;
+}
+function next(){
+ if(!feelingChoices.length&&!current){openFeelingModal('setup');return}
+ if(current){drawPoints();$('status').textContent='Finish the saved unanswered comparison before moving on.';return}
+ clearMarkers();
+ const feeling=selectedFeeling||feelingChoices[Math.max(0,feelingIndex)];
+ const relevant=history.filter(h=>h.feeling===feeling);
+ let reference=null;
+ // Revisit earlier strong sites occasionally only after a substantial break.
+ // Formerly ~70% of pairs recycled an earlier winner, causing obvious repetition.
+ if(relevant.length>=10&&Math.random()<.12){
+  const recent=history.slice(-15).flatMap(h=>[h.A,h.B]);
+  const winners=relevant.filter(h=>h.answer==='A'||h.answer==='B')
+   .map(h=>h.answer==='A'?h.A:h.B)
+   .filter(p=>allowed(p)&&recent.every(q=>d(p,q)>=20));
+  if(winners.length)reference=winners[Math.floor(Math.random()*winners.length)];
+ }
+ if(!reference)reference=pickUnderexploredPoint();
+ // Mix local comparisons with broad comparisons across the test polygon.
+ let fresh=reference?pickUnderexploredPoint(reference,60+Math.random()*(MAX_PAIR_METERS-60),reference):null;
+ if(!fresh)fresh=pickUnderexploredPoint(reference,MAX_PAIR_METERS,reference);
+ if(fresh&&reference&&d(reference,fresh)>MAX_PAIR_METERS)fresh=null;
+ if(!reference||!fresh||d(reference,fresh)<16){
+  $('status').textContent='Could not generate sufficiently distinct sites; please try again.';return;
+ }
+ const swapped=Math.random()<.5;
+ current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
+ if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
+ showSelectedFeeling(feeling);
+ setDockCollapsed(true);
+
+ drawPoints();
+ $('status').textContent='Tap the stronger dot, or open the dock for other answers.';
+}
+
+let recording=false;
+function submitAnswer(answer){
+ if(!current||recording||!['A','B','equal','neither','different'].includes(answer))return;
+ recording=true;
+ const pending=current;
+ history.push({...pending,answer,respondedAt:new Date().toISOString()});
+ allSites.push(pending.A,pending.B);current=null;blockCount++;
+ if(feelingChoices.length>1&&blockCount>=blockGoal)pendingFeelingSwitch=true;
+ if(!saveLocal()){
+  history.pop();allSites.splice(-2);current=pending;blockCount--;pendingFeelingSwitch=false;drawPoints();recording=false;return;
+ }
+ $('status').textContent='Response saved ('+history.length+' comparisons).';
+ recording=false;
+ if(pendingFeelingSwitch){
+  clearMarkers();showRotationNotice();
+ }else next();
+}
+$('quickEqual').onclick=()=>submitAnswer('equal');
+$('quickNeither').onclick=()=>submitAnswer('neither');
+$('export').onclick=()=>{
+ const obj={exportVersion:4,isolatedTest:true,feelings:feelingChoices,rotation:{feelingIndex,blockCount,blockGoal,pendingFeelingSwitch},area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
+ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminal-personal-test.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+function restore(){
+ try{
+  const raw=localStorage.getItem(TEST_KEY);
+  if(raw){
+   const saved=JSON.parse(raw);
+   if(!Array.isArray(saved.history))throw Error('Invalid saved records');
+   history=saved.history.filter(x=>x&&Array.isArray(x.A)&&Array.isArray(x.B)&&typeof x.feeling==='string'
+      &&['A','B','equal','neither','different'].includes(x.answer));
+   allSites=history.flatMap(x=>[x.A,x.B]);
+   if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string'&&allowed(saved.current.A)&&allowed(saved.current.B)&&d(saved.current.A,saved.current.B)<=MAX_PAIR_METERS)current=saved.current;
+   if(Array.isArray(saved.feelingChoices))feelingChoices=saved.feelingChoices.filter(x=>typeof x==='string'&&x.trim()).slice(0,40);
+   feelingIndex=Math.max(0,Math.min(feelingChoices.length-1,Number(saved.feelingIndex)||0));
+   blockCount=Math.max(0,Number(saved.blockCount)||0);blockGoal=Math.max(0,Number(saved.blockGoal)||0);
+   pendingFeelingSwitch=!!saved.pendingFeelingSwitch;
+   if(feelingChoices.length&&!blockGoal)blockGoal=randomBlockSize();
+  }
+  // Restore a complete workflow, never a stale feeling label with no dots.
+  if(!history.length&&!current){
+   // An empty test is the onboarding screen even if old versions retained
+   // feeling selections or a separate preference key.
+   feelingChoices=[];feelingIndex=0;blockCount=0;blockGoal=0;
+   pendingFeelingSwitch=false;selectedFeeling=null;
+   try{localStorage.removeItem(PREF_KEY)}catch(e){}
+   map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
+   saveLocal();
+   openFeelingModal('setup');
+   $('status').textContent='Choose the feelings to explore.';
+  }else if(pendingFeelingSwitch){
+   // Do not display old pair labels while rotation is waiting for selection.
+   clearMarkers();saveLocal();
+   showRotationNotice();
+  }else if(current){
+   showSelectedFeeling(current.feeling);drawPoints();
+   setDockCollapsed(true);saveLocal();
+   $('status').textContent=history.length+' previous comparisons restored.';
+  }else if(feelingChoices.length){
+   // Some earlier versions saved answers but did not save the next pair.
+   // Generate one instead of leaving a blank map.
+   selectedFeeling=feelingChoices[Math.max(0,Math.min(feelingIndex,feelingChoices.length-1))];
+   showSelectedFeeling(selectedFeeling);saveLocal();next();
+  }else{
+   // Legacy history with no selected feeling: ask before resuming.
+   openFeelingModal('setup');saveLocal();
+  }
+ }catch(e){
+  $('status').textContent='Saved history could not be restored: '+e.message+'. Do not reset browser data.';
+
+ }
+}
+
+restore();
+// The opening feelings dock must remain expanded until the user retracts it.
+})();
+</script></body></html>
