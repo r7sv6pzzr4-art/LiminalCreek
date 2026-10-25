@@ -123,10 +123,11 @@ const historical1930=L.tileLayer.wms('https://img.nj.gov/imagerywms/BlackWhite19
 const layer=new L.FeatureGroup().addTo(map);
 const photoBounds=[[40.346256771,-74.172214460],[40.351719119,-74.162024166]];
 const photoUrl='./trapp-1987.png';
-const defaultBoundary={"type":"Polygon","coordinates":[[[-74.16300101,40.35164991],[-74.16749526,40.35153085],[-74.17003977,40.35072433],[-74.17074535,40.34880369],[-74.1718584,40.34738087],[-74.17221006,40.34632964],[-74.16876724,40.34685033],[-74.16483454,40.34748522],[-74.16206858,40.34805774],[-74.16300101,40.35164991]]]};
+const defaultBoundary={"type":"Polygon","coordinates":[[[-74.16754493287007,40.34707234002636],[-74.16773535318367,40.348214796349694],[-74.16726431600652,40.34935249153645],[-74.16627984935174,40.35018280864308],[-74.1652773177937,40.350525264902736],[-74.16387925328081,40.350754426055246],[-74.1630269713535,40.349643985455984],[-74.1625542009098,40.34796561219721],[-74.16405443770545,40.347614420457916],[-74.16567546636871,40.3473691903959],[-74.16681484472115,40.34719054204395],[-74.16679187871617,40.34719621603167],[-74.16754493287007,40.34707234002636]]]};
 const photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:false,alt:'1987 aerial photograph'}).addTo(map);
 photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 photograph. Please reload.'});
 let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
+L.geoJSON(defaultBoundary,{style:{color:'#d9ecb0',weight:2,opacity:.72,fill:false,interactive:false}}).addTo(map);
 const TEST_KEY='liminal-personal-independent-fieldtest-v2';
 const PREF_KEY='liminal-personal-selected-feeling-v1';
 const DEFAULT_FEELINGS=[
@@ -274,9 +275,9 @@ function next(){
  const relevant=history.filter(h=>h.feeling===feeling);
  let reference=null;
  // Choose previous winners frequently, plus exploration to avoid lock-in.
- const winners=relevant.filter(h=>h.answer==='A'||h.answer==='B').map(h=>h.answer==='A'?h.A:h.B);
+ const winners=relevant.filter(h=>h.answer==='A'||h.answer==='B').map(h=>h.answer==='A'?h.A:h.B).filter(allowed);
  if(winners.length&&Math.random()<.7)reference=winners[Math.floor(Math.random()*winners.length)];
- if(!reference)reference=allSites.length&&Math.random()<.5?allSites[Math.floor(Math.random()*allSites.length)]:randomPoint();
+ if(!reference){const eligibleSites=allSites.filter(allowed);reference=eligibleSites.length&&Math.random()<.5?eligibleSites[Math.floor(Math.random()*eligibleSites.length)]:randomPoint();}
  let fresh=null;
  const near=reference&&Math.random()<.68;
  if(near)fresh=randomPoint(reference,80+Math.random()*200);
@@ -324,7 +325,7 @@ function restore(){
    history=saved.history.filter(x=>x&&Array.isArray(x.A)&&Array.isArray(x.B)&&typeof x.feeling==='string'
       &&['A','B','equal','neither','different'].includes(x.answer));
    allSites=history.flatMap(x=>[x.A,x.B]);
-   if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string')current=saved.current;
+   if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string'&&allowed(saved.current.A)&&allowed(saved.current.B))current=saved.current;
    if(Array.isArray(saved.feelingChoices))feelingChoices=saved.feelingChoices.filter(x=>typeof x==='string'&&x.trim()).slice(0,40);
    feelingIndex=Math.max(0,Math.min(feelingChoices.length-1,Number(saved.feelingIndex)||0));
    blockCount=Math.max(0,Number(saved.blockCount)||0);blockGoal=Math.max(0,Number(saved.blockGoal)||0);
@@ -335,7 +336,7 @@ function restore(){
    showSelectedFeeling(current.feeling);
    drawPoints();
  }else{
-   map.fitBounds(photoBounds);
+   map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
    try{const previous=localStorage.getItem(PREF_KEY);if(previous)showSelectedFeeling(previous)}catch(e){}
  }
  setDockCollapsed(true);
