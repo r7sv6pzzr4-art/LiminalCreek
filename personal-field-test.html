@@ -379,18 +379,34 @@ function restore(){
    pendingFeelingSwitch=!!saved.pendingFeelingSwitch;
    if(feelingChoices.length&&!blockGoal)blockGoal=randomBlockSize();
   }
-  if(current){
-   showSelectedFeeling(current.feeling);
-   drawPoints();
- }else{
+  // Restore a complete workflow, never a stale feeling label with no dots.
+  if(!history.length&&!current){
+   // An empty test is the onboarding screen even if old versions retained
+   // feeling selections or a separate preference key.
+   feelingChoices=[];feelingIndex=0;blockCount=0;blockGoal=0;
+   pendingFeelingSwitch=false;selectedFeeling=null;
+   try{localStorage.removeItem(PREF_KEY)}catch(e){}
    map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
-   try{const previous=localStorage.getItem(PREF_KEY);if(previous)showSelectedFeeling(previous)}catch(e){}
- }
- setDockCollapsed(true);
-  saveLocal();
-  $('status').textContent=history.length+' previous comparisons restored.';
-  if(pendingFeelingSwitch){clearMarkers();$('question').style.display='none';openFeelingModal('switch')}
-  else if(!feelingChoices.length&&!current)openFeelingModal('setup');
+   saveLocal();
+   openFeelingModal('setup');
+   $('status').textContent='Choose the feelings to explore.';
+  }else if(pendingFeelingSwitch){
+   // Do not display old pair labels while rotation is waiting for selection.
+   clearMarkers();$('question').style.display='none';saveLocal();
+   openFeelingModal('switch');
+  }else if(current){
+   showSelectedFeeling(current.feeling);drawPoints();
+   setDockCollapsed(true);saveLocal();
+   $('status').textContent=history.length+' previous comparisons restored.';
+  }else if(feelingChoices.length){
+   // Some earlier versions saved answers but did not save the next pair.
+   // Generate one instead of leaving a blank map.
+   selectedFeeling=feelingChoices[Math.max(0,Math.min(feelingIndex,feelingChoices.length-1))];
+   showSelectedFeeling(selectedFeeling);saveLocal();next();
+  }else{
+   // Legacy history with no selected feeling: ask before resuming.
+   openFeelingModal('setup');saveLocal();
+  }
  }catch(e){
   $('status').textContent='Saved history could not be restored: '+e.message+'. Do not reset browser data.';
   $('start').disabled=true;
