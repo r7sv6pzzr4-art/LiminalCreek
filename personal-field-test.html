@@ -76,15 +76,22 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 #rotationTitle{text-transform:uppercase;letter-spacing:.08em;font-size:.81rem;color:#b3c9ba}
 #rotationFeeling{font:600 clamp(1.2rem,4.5vw,1.6rem)/1.35 Georgia,serif;margin:16px 0 24px}
 #rotationOK{text-align:center;font-weight:700;margin:0}
+
+#mapInstruction{pointer-events:auto;top:auto;bottom:67px;width:min(610px,calc(100vw - 18px));max-width:none;transform:translateX(-50%);border-radius:14px;display:flex;flex-direction:column;gap:7px;background:#142d26ee}
+#mapInstruction strong{font-size:.9rem}
+.quickChoices{display:flex;gap:7px;width:100%}.quickChoices button{flex:1;min-width:0;text-align:center;font-size:.82rem;line-height:1.25;padding:10px 6px;margin:0;background:#315645}
+#nextFeelingWrap[hidden],#nextFeelingSelect[hidden]{display:none}
+#nextFeelingWrap:not([hidden]){display:block;margin:10px 0 5px}
+@media(max-width:370px){.quickChoices button{font-size:.74rem;padding:8px 4px}}
 </style></head><body>
 <header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Feeling being mapped"><span class="feelingLabel">Mapping the feeling</span><span id="headerFeelingText">Choose an impression</span></div></header>
 <div id="rotationNotice" hidden role="dialog" aria-modal="true" aria-labelledby="rotationTitle">
  <div id="rotationCard"><div id="rotationTitle">Now testing</div><div id="rotationFeeling"></div>
  <button id="rotationOK" type="button">OK</button></div></div>
-<div id="map"></div><div id="mapInstruction" role="status" hidden>Tap the dot where the feeling is stronger. <span>Other answers ↑</span></div>
+<div id="map"></div><div id="mapInstruction" role="group" aria-label="Compare two locations" hidden><strong>Tap the dot where the feeling is stronger</strong><div class="quickChoices"><button type="button" id="quickEqual">≈ Both are similar</button><button type="button" id="quickNeither">∅ Neither associated with the feeling</button></div></div>
 
 <main id="bottomPanel" class="dock-collapsed">
-<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Other answers / change impression ↑</span></button>
+<button id="dockHandle" type="button" aria-label="Expand comparison dock" aria-expanded="false"><span id="dockGrip"></span><span id="dockCaption">Manage feelings / export ↑</span></button>
 <div id="dockContent">
 <div id="feelingModal" hidden>
 <div id="feelingDialog" role="dialog" aria-modal="true" aria-labelledby="feelingTitle">
@@ -92,28 +99,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 <p id="feelingModalDescription"></p><div id="feelingList"></div>
 <label for="newFeeling">Add another impression</label>
 <div class="row"><input id="newFeeling" maxlength="160" placeholder="Describe a feeling…"><button id="addFeeling" type="button">Add</button></div>
-<p id="feelingError" role="alert"></p><button id="confirmFeelings" type="button">Begin comparisons</button>
+<label id="nextFeelingWrap" for="nextFeelingSelect" hidden>Feeling to evaluate next</label><select id="nextFeelingSelect" hidden style="width:100%"></select><p id="feelingError" role="alert"></p><button id="confirmFeelings" type="button">Begin comparisons</button>
 </div></div>
-<div id="selectionSummary" class="panel" hidden>
-<strong id="currentImpression"></strong>
-<div class="row"><button id="nextComparison" type="button">Present next comparison</button><button id="changeImpression" type="button">Change impression to evaluate</button></div>
-</div>
-<section class="panel" id="impressionChooser"><strong>Choose an impression to compare</strong>
-<p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
-<select id="feeling"><option>Feels imprinted with human happiness</option><option>Feels creepy or haunted</option><option>A pleasant sense of melancholy or wistfulness</option><option>A haunting sense of emptiness, solitude, or something lost</option><option>Feels spiritually unwelcoming</option></select>
-<label for="custom">Or enter a custom impression:</label> <input id="custom" placeholder="An impression in your own words" style="width:100%">
-<button id="start" disabled>Start evaluating this impression</button>
-</section>
-<section class="panel" id="question">
-<p>This area may be associated with the following impression:</p><p id="impression"></p>
-<h2>At which location is this feeling stronger?</h2>
-<button data-answer="A"><span class="dots a"></span>The feeling is stronger at Location A</button>
-<button data-answer="B"><span class="dots b"></span>The feeling is stronger at Location B</button>
-<button data-answer="equal">The feeling is about equally strong at both locations</button>
-<button data-answer="neither">I don't sense this feeling at either location</button>
-<button data-answer="different">The locations feel different, but neither feels clearly stronger</button>
-<p id="round" class="tag"></p><button id="switchFeelingInQuestion" type="button" class="secondary">Change impression to evaluate</button>
-</section>
+<section class="panel" id="managePanel"><strong>Manage test feelings</strong><p class="tag">Change, add, or remove feelings. Completed comparisons are preserved.</p><button type="button" id="manageFeelings">Edit / change feelings</button></section>
 <p id="status" role="status"></p>
 <div class="panel"><strong>Field-test records</strong>
 <p class="tag">Your responses and the next unanswered question are saved locally. Export a JSON backup before clearing browser data or changing devices. Your brother has his own separate history.</p>
@@ -156,6 +144,7 @@ const DEFAULT_FEELINGS=[
 ];
 let feelingChoices=[],feelingIndex=0,blockCount=0,blockGoal=0,pendingFeelingSwitch=false,modalPurpose='setup';
 const randomBlockSize=()=>10+Math.floor(Math.random()*11);
+const MAX_PAIR_METERS=152.4; // 500 feet
 function renderFeelingList(){
  const list=$('feelingList');list.replaceChildren();
  for(const feeling of new Set([...DEFAULT_FEELINGS,...feelingChoices])){
@@ -163,7 +152,16 @@ function renderFeelingList(){
   input.type='checkbox';input.value=feeling;input.checked=feelingChoices.includes(feeling);
   label.append(input,document.createTextNode(feeling));list.append(label);
  }
+ updateNextChoices();
 }
+function updateNextChoices(){
+ const select=$('nextFeelingSelect'),previous=select.value;
+ const choices=[...$('feelingList').querySelectorAll('input:checked')].map(x=>x.value);
+ select.replaceChildren();
+ for(const feeling of choices){const opt=document.createElement('option');opt.value=feeling;opt.textContent=feeling;select.append(opt)}
+ if(choices.length)select.value=choices.includes(previous)?previous:choices.includes(selectedFeeling)?selectedFeeling:choices[0];
+}
+$('feelingList').onchange=updateNextChoices;
 function addFeeling(){
  const value=$('newFeeling').value.trim().slice(0,160);if(!value)return;
  if(!feelingChoices.includes(value))feelingChoices.push(value);
@@ -199,7 +197,9 @@ function openFeelingModal(purpose){
  $('feelingModalDescription').textContent=purpose==='switch'?
  'A change of impression helps keep observations fresh. Review the selected feelings, then continue.' :
  'Which impressions might characterize this landscape? Select several or add your own. We will rotate after 10–20 comparisons of each feeling.';
- $('confirmFeelings').textContent=purpose==='switch'?'Continue with next feeling':'Begin comparisons';
+ $('confirmFeelings').textContent=purpose==='setup'?'Begin comparisons':'Apply changes';
+ $('nextFeelingWrap').hidden=purpose!=='manage';
+ $('nextFeelingSelect').hidden=purpose!=='manage';
  $('feelingError').textContent='';renderFeelingList();$('feelingModal').hidden=false;
  dock.classList.add('feeling-mode');
  setDockCollapsed(false);
@@ -212,7 +212,9 @@ $('confirmFeelings').onclick=()=>{
  const old={feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling};
  const previous=selectedFeeling;feelingChoices=[...new Set(choices)];
  const at=feelingChoices.indexOf(previous);
- feelingIndex=modalPurpose==='switch'?(at<0?0:(at+1)%feelingChoices.length):Math.max(0,at);
+ feelingIndex=modalPurpose==='manage'?
+   Math.max(0,feelingChoices.indexOf($('nextFeelingSelect').value)):
+   modalPurpose==='switch'?(at<0?0:(at+1)%feelingChoices.length):Math.max(0,at);
  blockCount=0;blockGoal=randomBlockSize();pendingFeelingSwitch=false;
  selectedFeeling=feelingChoices[feelingIndex];
  if(!saveLocal()){({feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=old);return}
@@ -228,7 +230,7 @@ function setDockCollapsed(collapsed){
  dockHandle.setAttribute('aria-expanded',String(!collapsed));
  $('dockCaption').textContent=dock.classList.contains('feeling-mode')?
    (collapsed?'Choose area impressions ↑':'View the map ↓'):
-   (collapsed?'Other answers / change impression ↑':'Hide options ↓');
+   (collapsed?'Manage feelings / export ↑':'Close settings ↓');
  setTimeout(()=>map.invalidateSize(),240);
 }
 dockHandle.onclick=()=>{if(dockHandle.dataset.swiped)return;setDockCollapsed(!dock.classList.contains('dock-collapsed'))};
@@ -244,20 +246,11 @@ function showSelectedFeeling(feeling){
  $('impressionChooser').hidden=true;
  try{localStorage.setItem(PREF_KEY,feeling)}catch(e){}
 }
-$('nextComparison').onclick=()=>next();
-$('switchFeelingInQuestion').onclick=()=>{
- if(current&&!confirm('Discard this unanswered pair and change the impression? Your completed answers will remain saved.'))return;
+$('manageFeelings').onclick=()=>{
+ if(current&&!confirm('Discard the unanswered pair to edit feelings? Completed answers are preserved.'))return;
  const previous=current;current=null;
  if(!saveLocal()){current=previous;return}
- clearMarkers();$('question').style.display='none';setDockCollapsed(true);
- openFeelingModal('switch');
-};
-$('changeImpression').onclick=()=>{
- if(current){
-  $('status').textContent='Finish your current pair first. You can change impressions after recording your answer.';
-  setDockCollapsed(false);return;
- }
- openFeelingModal('switch');
+ clearMarkers();openFeelingModal('manage');
 };
 function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[];$('mapInstruction').hidden=true}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
@@ -296,8 +289,6 @@ const zoom=Math.min(19,map.getBoundsZoom(target,false,padding));
 map.stop();
 map.setView(target.getCenter(),zoom,{animate:!reduceMotion,pan:{animate:!reduceMotion,duration:0.55},zoom:{animate:!reduceMotion}});
 
- $('impression').textContent='“'+current.feeling+'”';$('round').textContent='Comparison '+(history.length+1);
- $('question').style.display='block';
  $('mapInstruction').hidden=false;
 }
 $('reset').onclick=()=>{
@@ -309,8 +300,8 @@ $('reset').onclick=()=>{
   return;
  }
  try{localStorage.removeItem(PREF_KEY)}catch(e){}
- clearMarkers();$('question').style.display='none';
- $('selectionSummary').hidden=true;$('impressionChooser').hidden=false;
+ clearMarkers();
+$('impressionChooser').hidden=false;
  map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
  $('status').textContent='Test reset. Choose the feelings to explore.';
  openFeelingModal('setup');
@@ -323,7 +314,7 @@ function pickUnderexploredPoint(center=null,radius=150,other=null){
  let winner=null,best=-Infinity;
  for(let i=0;i<65;i++){
   const p=randomPoint(center,radius);
-  if(!p||other&&d(p,other)<20)continue;
+  if(!p||other&&(d(p,other)<20||d(p,other)>MAX_PAIR_METERS))continue;
   const recentDistance=recent.length?Math.min(...recent.map(q=>d(p,q))):100;
   const olderDistance=older.length?Math.min(...older.map(q=>d(p,q))):100;
   if(recentDistance<20||olderDistance<6)continue;
@@ -335,7 +326,7 @@ function pickUnderexploredPoint(center=null,radius=150,other=null){
  // In a small area, relax spacing rather than presenting the same exact dot.
  for(let i=0;i<250;i++){
   const p=randomPoint(center,radius);
-  if(p&&(!other||d(p,other)>=16)
+  if(p&&(!other||(d(p,other)>=16&&d(p,other)<=MAX_PAIR_METERS))
      &&recent.every(q=>d(p,q)>=9)
      &&older.every(q=>d(p,q)>=3))return p;
  }
@@ -359,8 +350,9 @@ function next(){
  }
  if(!reference)reference=pickUnderexploredPoint();
  // Mix local comparisons with broad comparisons across the test polygon.
- let fresh=reference&&Math.random()<.55?pickUnderexploredPoint(reference,90+Math.random()*140,reference):null;
- if(!fresh)fresh=pickUnderexploredPoint(null,150,reference);
+ let fresh=reference?pickUnderexploredPoint(reference,60+Math.random()*(MAX_PAIR_METERS-60),reference):null;
+ if(!fresh)fresh=pickUnderexploredPoint(reference,MAX_PAIR_METERS,reference);
+ if(fresh&&reference&&d(reference,fresh)>MAX_PAIR_METERS)fresh=null;
  if(!reference||!fresh||d(reference,fresh)<16){
   $('status').textContent='Could not generate sufficiently distinct sites; please try again.';return;
  }
@@ -388,10 +380,11 @@ function submitAnswer(answer){
  $('status').textContent='Response saved ('+history.length+' comparisons).';
  recording=false;
  if(pendingFeelingSwitch){
-  clearMarkers();$('question').style.display='none';showRotationNotice();
+  clearMarkers();showRotationNotice();
  }else next();
 }
-document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>submitAnswer(b.dataset.answer));
+$('quickEqual').onclick=()=>submitAnswer('equal');
+$('quickNeither').onclick=()=>submitAnswer('neither');
 $('export').onclick=()=>{
  const obj={exportVersion:4,isolatedTest:true,feelings:feelingChoices,rotation:{feelingIndex,blockCount,blockGoal,pendingFeelingSwitch},area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
@@ -406,7 +399,7 @@ function restore(){
    history=saved.history.filter(x=>x&&Array.isArray(x.A)&&Array.isArray(x.B)&&typeof x.feeling==='string'
       &&['A','B','equal','neither','different'].includes(x.answer));
    allSites=history.flatMap(x=>[x.A,x.B]);
-   if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string'&&allowed(saved.current.A)&&allowed(saved.current.B))current=saved.current;
+   if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string'&&allowed(saved.current.A)&&allowed(saved.current.B)&&d(saved.current.A,saved.current.B)<=MAX_PAIR_METERS)current=saved.current;
    if(Array.isArray(saved.feelingChoices))feelingChoices=saved.feelingChoices.filter(x=>typeof x==='string'&&x.trim()).slice(0,40);
    feelingIndex=Math.max(0,Math.min(feelingChoices.length-1,Number(saved.feelingIndex)||0));
    blockCount=Math.max(0,Number(saved.blockCount)||0);blockGoal=Math.max(0,Number(saved.blockGoal)||0);
@@ -426,7 +419,7 @@ function restore(){
    $('status').textContent='Choose the feelings to explore.';
   }else if(pendingFeelingSwitch){
    // Do not display old pair labels while rotation is waiting for selection.
-   clearMarkers();$('question').style.display='none';saveLocal();
+   clearMarkers();saveLocal();
    showRotationNotice();
   }else if(current){
    showSelectedFeeling(current.feeling);drawPoints();
