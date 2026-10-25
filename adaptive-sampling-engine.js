@@ -136,8 +136,23 @@ class PersonalAdapter{
   const pool=[];
   for(let i=0;i<125;i++){const p=this.rand();if(valid(p,true))pool.push({p,pred:model.estimate(p),coverage:cap(nearest(p,perFeeling)/100,0,1)})}
   if(!pool.length)throw Error('No test locations available inside the boundary');
-  const kinds=model.count>=12?['explore','explore','explore','peak','peak','gradient','gradient','valley']:['explore'];
-  let mode=kinds[Math.floor(rng()*kinds.length)];
+  // Smoothly shift from coverage toward refinement as each feeling gains
+  // observations AND a discernible gradient; no hard phase boundary.
+  const levels=pool.map(x=>x.pred.mean);
+  const range=Math.max(...levels)-Math.min(...levels);
+  const evidence=cap(range/(range+.75),0,1);
+  const readiness=cap(model.count/(model.count+25)*evidence,0,1);
+  const shares=[
+   ['explore',.75-.43*readiness],
+   ['peak',.08+.22*readiness],
+   ['gradient',.12+.14*readiness],
+   ['valley',.05+.07*readiness]
+  ];
+  let mode='explore';
+  if(model.count>=5){
+   let ticket=rng();
+   for(const [name,weight] of shares){ticket-=weight;if(ticket<=0){mode=name;break}}
+  }
   const ranked=pool.slice().sort((a,b)=>b.pred.mean-a.pred.mean);
   const maxima=[];
   for(const x of ranked){
