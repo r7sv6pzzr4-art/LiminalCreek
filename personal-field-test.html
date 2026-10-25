@@ -31,6 +31,7 @@ html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-ind
 #selectionSummary button{font-size:.88rem;padding:9px;margin-bottom:0;background:#203e34}
 #impressionChooser[hidden],#selectionSummary[hidden]{display:none!important}
 #question{margin-top:6px}
+#switchFeelingInQuestion{font-size:.84rem;padding:8px 10px;margin-top:18px;background:#193a30}
 @media(max-height:600px){#bottomPanel{max-height:82dvh}#dockContent{max-height:calc(82dvh - 55px)}}
 </style></head><body>
 <header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
@@ -57,7 +58,7 @@ html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-ind
 <button data-answer="equal">The feeling is about equally strong at both locations</button>
 <button data-answer="neither">I don't sense this feeling at either location</button>
 <button data-answer="different">The locations feel different, but neither feels clearly stronger</button>
-<p id="round" class="tag"></p>
+<p id="round" class="tag"></p><button id="switchFeelingInQuestion" type="button" class="secondary">Change impression to evaluate</button>
 </section>
 <p id="status" role="status"></p>
 <div class="panel"><strong>Field-test records</strong>
@@ -112,6 +113,15 @@ function showSelectedFeeling(feeling){
  try{localStorage.setItem(PREF_KEY,feeling)}catch(e){}
 }
 $('nextComparison').onclick=()=>next();
+$('switchFeelingInQuestion').onclick=()=>{
+ if(current&&!confirm('Discard this unanswered pair and change the impression? Your completed answers will remain saved.'))return;
+ const previous=current;current=null;
+ if(!saveLocal()){current=previous;return}
+ clearMarkers();$('question').style.display='none';
+ $('selectionSummary').hidden=true;$('impressionChooser').hidden=false;
+ setDockCollapsed(false);
+ $('status').textContent='Choose a different impression. Saved answers are preserved.';
+};
 $('changeImpression').onclick=()=>{
  if(current){
   $('status').textContent='Finish your current pair first. You can change impressions after recording your answer.';
