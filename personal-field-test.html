@@ -147,7 +147,14 @@ function drawPoints(){
   const icon=L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:26px;font-weight:bold;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[30,30],iconAnchor:[15,15]});
   markers.push(L.marker([point[1],point[0]],{icon}).addTo(map));
  }
- map.fitBounds(L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]).pad(1.1),{maxZoom:18});
+ const target=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]).pad(1.25);
+// Glide gently between nearby sites instead of snapping the map to each pair.
+const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dockHeight=dock.classList.contains('dock-collapsed')?55:Math.min(dock.getBoundingClientRect().height,window.innerHeight*.58);
+const viewOptions={maxZoom:18,paddingTopLeft:[20,20],paddingBottomRight:[20,dockHeight+20]};
+map.stop();
+if(reduceMotion)map.fitBounds(target,viewOptions);
+else map.flyToBounds(target,{...viewOptions,duration:1.35,easeLinearity:.22});
  $('impression').textContent='“'+current.feeling+'”';$('round').textContent='Comparison '+(history.length+1);
  $('question').style.display='block';
 }
@@ -176,9 +183,14 @@ function next(){
  current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
  if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
  showSelectedFeeling(feeling);
+ // First pair: collapse so the map can be explored. Subsequent pairs: leave
+ // the questions visible so each response flows straight into the next.
+ const firstPair=history.length===0;
+ setDockCollapsed(firstPair);
+ $('selectionSummary').hidden=true;
  drawPoints();
- setDockCollapsed(true);
- $('status').textContent='Compare locations A and B, then open the dock to record your answer.';
+ if(!firstPair)$('dockContent').scrollTop=0;
+ $('status').textContent=firstPair?'Open the dock when ready to answer.':'Response saved. Compare the new pair.';
 }
 $('start').onclick=()=>{if(!current){selectedFeeling=$('custom').value.trim()||$('feeling').value;}next()};
 document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
@@ -187,10 +199,10 @@ document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
  history.push({...pending,answer:b.dataset.answer,respondedAt:new Date().toISOString()});
  allSites.push(pending.A,pending.B);current=null;
  if(!saveLocal()){history.pop();allSites.splice(-2);current=pending;drawPoints();return}
- clearMarkers();
- $('question').style.display='none';
- setDockCollapsed(false);
- $('status').textContent='Response saved ('+history.length+' comparisons). Choose another pair or change the impression.';
+ // A successful response immediately yields the next pair, with the dock kept open
+ // for rapid successive judgments. Never advance if saving fails.
+ $('status').textContent='Response saved ('+history.length+' comparisons).';
+ next();
 });
 $('export').onclick=()=>{
  const obj={exportVersion:3,isolatedTest:true,area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
