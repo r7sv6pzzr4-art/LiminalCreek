@@ -41,7 +41,7 @@ html,body{height:100%;overflow:hidden}header{height:68px;position:relative;z-ind
 <div id="dockContent">
 <div id="selectionSummary" class="panel" hidden>
 <strong id="currentImpression"></strong>
-<button id="changeImpression" type="button">Change impression to evaluate</button>
+<div class="row"><button id="nextComparison" type="button">Present next comparison</button><button id="changeImpression" type="button">Change impression to evaluate</button></div>
 </div>
 <section class="panel" id="impressionChooser"><strong>Choose an impression to compare</strong>
 <p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
@@ -111,6 +111,7 @@ function showSelectedFeeling(feeling){
  $('impressionChooser').hidden=true;
  try{localStorage.setItem(PREF_KEY,feeling)}catch(e){}
 }
+$('nextComparison').onclick=()=>next();
 $('changeImpression').onclick=()=>{
  if(current){
   $('status').textContent='Finish your current pair first. You can change impressions after recording your answer.';
@@ -186,8 +187,10 @@ document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
  history.push({...pending,answer:b.dataset.answer,respondedAt:new Date().toISOString()});
  allSites.push(pending.A,pending.B);current=null;
  if(!saveLocal()){history.pop();allSites.splice(-2);current=pending;drawPoints();return}
- $('status').textContent='Response saved ('+history.length+' comparisons).';
- next();
+ clearMarkers();
+ $('question').style.display='none';
+ setDockCollapsed(false);
+ $('status').textContent='Response saved ('+history.length+' comparisons). Choose another pair or change the impression.';
 });
 $('export').onclick=()=>{
  const obj={exportVersion:3,isolatedTest:true,area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
