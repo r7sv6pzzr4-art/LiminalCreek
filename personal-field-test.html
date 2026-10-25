@@ -17,22 +17,7 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 <header><h1>LiminalCreek · Personal comparison field test</h1><small>Sandbox only • no login • no Supabase • not connected to the shared study</small></header>
 <div id="map"></div>
 <main>
-<section class="panel"><strong>1. Study setup — independent field test</strong>
-<p class="tag">Set your test extent here; these tools do not access the real study. The test area is saved only on this device.</p>
-<div class="row"><button id="toggleSetup" type="button" aria-expanded="true">Hide setup controls</button></div>
-<div id="setupFields">
-<label for="basemap">Background map:</label>
-<select id="basemap"><option value="1987" selected>1987 Trapp aerial photograph</option><option value="osm">Current OpenStreetMap</option><option value="1930">1930s NJ imagery (experimental)</option></select>
-<p id="layerStatus" class="tag">Loading 1987 imagery. If it is not installed yet, the map will fall back to OpenStreetMap.</p>
-<button id="historic1979" type="button">Open HistoricAerials at this map location (select 1979)</button>
-<p class="tag">The historic viewer opens separately, positioned at the map center. Select 1979 in its aerial-years list. Keep both windows open to compare locations; the test app does not copy its imagery.</p>
-<p class="tag">Use the polygon tool at the top left of the map (click vertices; click the first point to close), or import an existing GeoJSON Polygon/FeatureCollection. For this sandbox, choose an area away from the original study.</p>
-<input type="file" id="geo" accept=".geojson,.json,application/geo+json,application/json">
-<p id="areaStatus" class="tag">No test area yet. Map is centered arbitrarily until you draw or import an area.</p>
-<div class="row"><button id="clear" type="button">Clear test area</button><button id="exportArea" type="button">Download test-area GeoJSON</button><button id="reset" type="button">Reset comparison history</button></div>
-</div>
-</section>
-<section class="panel"><strong>2. Choose an impression to compare</strong>
+<section class="panel"><strong>Choose an impression to compare</strong>
 <p class="tag">The first comparison uses a random stand-in reference because this area has no original study observations. Subsequent choices influence which reference and new sites are offered.</p>
 <select id="feeling"><option>Feels imprinted with human happiness</option><option>Feels creepy or haunted</option><option>A pleasant sense of melancholy or wistfulness</option><option>A haunting sense of emptiness, solitude, or something lost</option><option>Feels spiritually unwelcoming</option></select>
 <label for="custom">Or enter a custom impression:</label> <input id="custom" placeholder="An impression in your own words" style="width:100%">
@@ -50,8 +35,10 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 </section>
 <p id="status" role="status"></p>
 <div class="panel"><strong>Field-test records</strong>
-<p class="tag">Your answers are saved on this device, separately from the main LiminalCreek study. Export your JSON file to compare with your brother later. His responses will stay on his device unless he chooses to export them.</p>
-<p class="tag" id="savedCounter">0 comparisons saved locally.</p></div>
+<p class="tag">Your responses and the next unanswered question are saved locally. Export a JSON backup before clearing browser data or changing devices. Your brother has his own separate history.</p>
+<p class="tag" id="savedCounter">Loading saved responses…</p>
+<p class="tag" id="saveHealth" role="status">Responses are kept on this device. Export a JSON backup periodically.</p>
+<button id="reset" type="button">Clear comparison history (confirmation required)</button></div>
 <div class="row"><button id="export">Export anonymous test comparisons (JSON)</button></div>
 <p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until explicitly exported or cleared. No actual study observations are accessed.</p>
 </main>
@@ -61,63 +48,15 @@ code{color:#d9dec0}input[type=file]{width:100%}textarea{width:100%;min-height:55
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const map=L.map('map').setView([40.349,-74.167],16);
-const baseCurrent=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+// Use the single 1987 photo: no current OSM tiles flash through transparent edges.
 const layer=new L.FeatureGroup().addTo(map);
-const historicItem='4e7de8d868c248f99c3fddc5bf8c0386'; // Official NJ 1930s WMS catalog item.
-let baseHistoric=null;
-const photoBounds=[[40.346256771, -74.172214460],[40.351719119, -74.162024166]];
-let photoLayer=null;
+const photoBounds=[[40.346256771,-74.172214460],[40.351719119,-74.162024166]];
 const photoUrl='./trapp-1987.png';
-const defaultBoundary={"type":"Polygon","coordinates":[[[-74.16300101,40.35164991],[-74.16749526,40.35153085],[-74.17003977,40.35072433],[-74.17037696,40.34978073],[-74.17074535,40.34880369],[-74.17091493,40.34860965],[-74.17133054,40.34808744],[-74.1718584,40.34738087],[-74.1719082,40.34726676],[-74.17221006,40.34632964],[-74.1708432,40.34656224],[-74.17028287,40.34668615],[-74.16876724,40.34685033],[-74.16650083,40.34723802],[-74.16483454,40.34748522],[-74.16395252,40.34764718],[-74.16335668,40.34779437],[-74.16206858,40.34805774],[-74.16300101,40.35164991]]]};
-function activatePhoto(){
-  if(photoLayer){if(!map.hasLayer(photoLayer))photoLayer.addTo(map);photoLayer.bringToBack();return}
-  photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:false,alt:'Georeferenced Trapp 1987 aerial photograph'});
-  photoLayer.on('error',()=>{
-    if(map.hasLayer(photoLayer))map.removeLayer(photoLayer);
-    photoLayer=null;$('basemap').value='osm';
-    $('layerStatus').textContent='1987 photo is not uploaded to GitHub Pages yet. OpenStreetMap is available; setup still works.';
-  });
-  photoLayer.on('load',()=>{$('layerStatus').textContent='1987 historical aerial imagery loaded. Draw or import your test boundary.'});
-  photoLayer.addTo(map).bringToBack();
-  map.fitBounds(photoBounds);
-}
-
-async function setupHistoric(){
- try{
-   // Discover the live WMS endpoint from NJ's ArcGIS Online catalog rather
-   // than guessing a server URL. Use names from WMS capabilities.
-   const root='https://www.arcgis.com/sharing/rest/content/items/'+historicItem+'?f=json';
-   const response=await fetch(root);
-   if(!response.ok)throw Error('catalog unavailable');
-   const item=await response.json();
-   if(!item.url||!/^https:\/\//i.test(item.url))throw Error('historical layer URL unavailable');
-   const base=item.url.split('?')[0];
-   const caps=await fetch(base+(base.includes('?')?'&':'?')+'service=WMS&request=GetCapabilities&version=1.1.1');
-   if(!caps.ok)throw Error('historical capabilities unavailable');
-   const xml=new DOMParser().parseFromString(await caps.text(),'text/xml');
-   if(xml.getElementsByTagName('parsererror').length)throw Error('invalid WMS capabilities');
-   const candidates=[...xml.getElementsByTagName('Layer')].map(l=>[...l.children].find(c=>c.localName==='Name')?.textContent).filter(Boolean);
-   if(!candidates.length)throw Error('WMS has no named imagery layer');
-   const wms=new URL(base);
-   const layerName=candidates[0];
-   baseHistoric=L.tileLayer.wms(wms.href,{layers:layerName,format:'image/png',transparent:false,version:'1.1.1',attribution:'NJOGIS / NJDEP · 1930s aerial photography',maxZoom:20});
-   if($('basemap').value==='1930'){map.removeLayer(baseCurrent);baseHistoric.addTo(map);baseHistoric.bringToBack();}
-   $('layerStatus').textContent='1930s New Jersey aerial photography available. Source: NJOGIS / NJDEP.';
- }catch(e){
-   $('layerStatus').textContent='Historical imagery could not be loaded ('+e.message+'). Current map remains available.';
-   $('basemap').value='osm';
- }
-}
-
-map.addControl(new L.Control.Draw({edit:{featureGroup:layer,remove:true},draw:{polyline:false,rectangle:false,circle:false,circlemarker:false,marker:false,polygon:{allowIntersection:false,showArea:true}}}));
-let polygons=[],history=[],current=null,markers=[],allSites=[];
+const defaultBoundary={"type":"Polygon","coordinates":[[[-74.16300101,40.35164991],[-74.16749526,40.35153085],[-74.17003977,40.35072433],[-74.17074535,40.34880369],[-74.1718584,40.34738087],[-74.17221006,40.34632964],[-74.16876724,40.34685033],[-74.16483454,40.34748522],[-74.16206858,40.34805774],[-74.16300101,40.35164991]]]};
+const photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:false,alt:'1987 aerial photograph'}).addTo(map);
+photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 photograph. Please reload.'});
+let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
 const TEST_KEY='liminal-personal-independent-fieldtest-v2';
-$('historic1979').onclick=()=>{
- const center=map.getCenter(),zoom=Math.min(19,Math.max(4,map.getZoom()));
- const url='https://www.historicaerials.com/viewer?lat='+encodeURIComponent(center.lat.toFixed(6))+
-   '&lon='+encodeURIComponent(center.lng.toFixed(6))+'&zoom='+encodeURIComponent(zoom);
- window.open(url,'_blank','noopener,noreferrer');
-};
 function clearMarkers(){markers.forEach(m=>map.removeLayer(m));markers=[]}
 function ringInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
 const a=ring[i],b=ring[j],cross=(a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0];if(cross)inside=!inside;}return inside}
@@ -128,27 +67,32 @@ function randomPoint(center=null,radius=150){const [w,s,e,n]=bounds();
 for(let i=0;i<5000;i++){let p;if(center){const theta=Math.random()*2*Math.PI,r=Math.sqrt(Math.random())*radius;p=[center[0]+r*Math.cos(theta)/(111195*Math.cos(center[1]*Math.PI/180)),center[1]+r*Math.sin(theta)/111195]}
 else p=[w+Math.random()*(e-w),s+Math.random()*(n-s)];
 if(allowed(p))return p;}return null}
-function addPolygonLayer(leafletLayer){
- const g=leafletLayer.toGeoJSON().geometry;if(!g)return;
- if(g.type==='Polygon')polygons.push(g.coordinates);
- if(g.type==='MultiPolygon')polygons.push(...g.coordinates);
+function saveLocal(){
+ try{
+  localStorage.setItem(TEST_KEY,JSON.stringify({version:3,history,current,allSites,updatedAt:new Date().toISOString()}));
+  const check=JSON.parse(localStorage.getItem(TEST_KEY));
+  if(check.history.length!==history.length)throw Error('Saved count mismatch');
+  $('savedCounter').textContent=history.length+' saved comparisons'+(current?' · unanswered comparison saved':'')+'.';
+  $('saveHealth').textContent='Saved locally and verified. Export periodically as a second copy.';
+  return true;
+ }catch(e){$('saveHealth').textContent='WARNING: Could not verify saving ('+e.message+'). Export immediately before closing the page.';return false}
 }
-function saveLocal(){try{localStorage.setItem(TEST_KEY,JSON.stringify({area:layer.toGeoJSON(),history,allSites}))}catch(e){}$('savedCounter').textContent=history.length+' comparisons saved locally.'}
-function refreshArea(){polygons=[];layer.eachLayer(addPolygonLayer);
-$('areaStatus').textContent=polygons.length?'Eligible area defined; '+polygons.length+' polygon(s).':'No test area yet.';
-$('start').disabled=!polygons.length;history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none';saveLocal()}
-map.on(L.Draw.Event.CREATED,e=>{layer.addLayer(e.layer);refreshArea();map.fitBounds(layer.getBounds().pad(.12))});
-map.on(L.Draw.Event.EDITED,refreshArea);map.on(L.Draw.Event.DELETED,refreshArea);
-$('geo').onchange=async e=>{
- try{const data=JSON.parse(await e.target.files[0].text()),features=data.type==='FeatureCollection'?data.features:data.type==='Feature'?[data]:[{type:'Feature',geometry:data}];
- const polys=features.filter(f=>['Polygon','MultiPolygon'].includes(f.geometry?.type));
- if(!polys.length)throw Error('No polygons found');layer.clearLayers();
- polys.forEach(f=>L.geoJSON(f,{onEachFeature:(feature,lyr)=>{if(lyr instanceof L.Polygon)layer.addLayer(lyr)}}));
- refreshArea();map.fitBounds(layer.getBounds().pad(.12));$('status').textContent='Imported isolated test area.';
- }catch(err){$('status').textContent='Import failed: '+err.message}
+function drawPoints(){
+ clearMarkers();if(!current)return;
+ for(const [point,letter,color] of [[current.A,'A','#55b7ec'],[current.B,'B','#f1ad65']]){
+  const icon=L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:26px;font-weight:bold;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[30,30],iconAnchor:[15,15]});
+  markers.push(L.marker([point[1],point[0]],{icon}).addTo(map));
+ }
+ map.fitBounds(L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]).pad(1.1),{maxZoom:18});
+ $('impression').textContent='“'+current.feeling+'”';$('round').textContent='Comparison '+(history.length+1);
+ $('question').style.display='block';
+}
+$('reset').onclick=()=>{
+ if(!confirm('Permanently clear saved comparison history on this device? Export a copy first.'))return;
+ const oldHistory=history,oldCurrent=current,oldSites=allSites;
+ history=[];current=null;allSites=[];if(!saveLocal()){history=oldHistory;current=oldCurrent;allSites=oldSites;return}
+ clearMarkers();$('question').style.display='none';$('status').textContent='Local test history cleared.';
 };
-$('clear').onclick=()=>{layer.clearLayers();refreshArea()};
-$('reset').onclick=()=>{history=[];current=null;allSites=[];clearMarkers();$('question').style.display='none';saveLocal();$('status').textContent='Comparisons reset; test boundary preserved.'};
 function next(){
  clearMarkers();
  const feeling=$('custom').value.trim()||$('feeling').value;
@@ -165,78 +109,45 @@ function next(){
  if(!reference||!fresh||d(reference,fresh)<12){$('status').textContent='Area too narrow for two distinct sites. Enlarge the polygon.';return}
  const swapped=Math.random()<.5;
  current={feeling,A:swapped?fresh:reference,B:swapped?reference:fresh,referenceIsA:!swapped};
- for(const [point,letter,color] of [[current.A,'A','#55b7ec'],[current.B,'B','#f1ad65']]){
-  const icon=L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:26px;font-weight:bold;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[30,30],iconAnchor:[15,15]});
-  markers.push(L.marker([point[1],point[0]],{icon}).addTo(map));
- }
- const xy=L.latLngBounds([[current.A[1],current.A[0]],[current.B[1],current.B[0]]]);
- map.fitBounds(xy.pad(1.1),{maxZoom:18});
- $('impression').textContent='“'+feeling+'”';$('round').textContent='Comparison '+(history.length+1);
- $('question').style.display='block';$('status').textContent='Choose the answer that best reflects your impression of the two marked locations.';
+ if(!saveLocal()){current=null;$('status').textContent='Could not save the next question. Export current answers.';return}
+ drawPoints();
+ $('status').textContent='Choose the answer that best reflects your impression.';
 }
 $('start').onclick=next;
 document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{
  if(!current)return;
- history.push({...current,answer:b.dataset.answer});
- allSites.push(current.A,current.B);
- saveLocal();current=null;
+ const pending=current;
+ history.push({...pending,answer:b.dataset.answer,respondedAt:new Date().toISOString()});
+ allSites.push(pending.A,pending.B);current=null;
+ if(!saveLocal()){history.pop();allSites.splice(-2);current=pending;drawPoints();return}
  $('status').textContent='Response recorded for this test session ('+history.length+' comparisons).';
  next();
 });
 $('export').onclick=()=>{
- const obj={exportVersion:2,isolatedTest:true,area:layer.toGeoJSON(),comparisons:history};
+ const obj={exportVersion:3,isolatedTest:true,area:{type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:defaultBoundary}]},comparisons:history,currentUnansweredComparison:current,exportedAt:new Date().toISOString()};
  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='liminal-personal-test.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-$('exportArea').onclick=()=>{
- const data=layer.toGeoJSON();
- if(!data.features.length){$('status').textContent='Draw a test polygon first.';return}
- const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/geo+json'});
- const url=URL.createObjectURL(blob),a=document.createElement('a');
- a.href=url;a.download='liminal-independent-test-area.geojson';a.click();
- setTimeout(()=>URL.revokeObjectURL(url),1000);
-};
-$('toggleSetup').onclick=()=>{
- const el=$('setupFields'),hidden=el.hidden;el.hidden=!hidden;
- $('toggleSetup').textContent=hidden?'Hide setup controls':'Show setup controls';
- $('toggleSetup').setAttribute('aria-expanded',String(hidden));
- setTimeout(()=>map.invalidateSize(),100);
-};
-$('basemap').onchange=()=>{
- if(photoLayer&&map.hasLayer(photoLayer))map.removeLayer(photoLayer);
- if(baseHistoric)map.removeLayer(baseHistoric);
- if(!map.hasLayer(baseCurrent))baseCurrent.addTo(map);
- if($('basemap').value==='1987'){activatePhoto();return}
- if($('basemap').value==='1930'){
-  if(!baseHistoric)setupHistoric();
-  else baseHistoric.addTo(map);
- }else $('layerStatus').textContent='OpenStreetMap background selected.';
-};
 function restore(){
  try{
- const saved=JSON.parse(localStorage.getItem(TEST_KEY)||'null');
- if(!saved)return;
- if(saved.area?.type==='FeatureCollection'&&Array.isArray(saved.area.features)){
-   L.geoJSON(saved.area,{onEachFeature:(feature,lyr)=>{if(lyr instanceof L.Polygon)layer.addLayer(lyr)}});
-   if(layer.getLayers().length){refreshArea();map.fitBounds(layer.getBounds().pad(.12));}
- }
- if(Array.isArray(saved.history)){
+  const raw=localStorage.getItem(TEST_KEY);
+  if(raw){
+   const saved=JSON.parse(raw);
+   if(!Array.isArray(saved.history))throw Error('Invalid saved records');
    history=saved.history.filter(x=>x&&Array.isArray(x.A)&&Array.isArray(x.B)&&typeof x.feeling==='string'
-     &&['A','B','equal','neither','different'].includes(x.answer));
+      &&['A','B','equal','neither','different'].includes(x.answer));
    allSites=history.flatMap(x=>[x.A,x.B]);
-   $('savedCounter').textContent=history.length+' comparisons saved locally.';
+   if(saved.current&&Array.isArray(saved.current.A)&&Array.isArray(saved.current.B)&&typeof saved.current.feeling==='string')current=saved.current;
+  }
+  if(current)drawPoints();else map.fitBounds(photoBounds);
+  saveLocal();
+  $('status').textContent=history.length+' previous comparisons restored.';
+ }catch(e){
+  $('status').textContent='Saved history could not be restored: '+e.message+'. Do not reset browser data.';
+  $('start').disabled=true;
  }
- saveLocal();
- }catch(e){$('status').textContent='Could not restore previous local test session.'}
 }
+$('start').disabled=false;
 restore();
-if(!polygons.length){
- L.geoJSON(defaultBoundary,{onEachFeature:(feature,lyr)=>{if(lyr instanceof L.Polygon)layer.addLayer(lyr)}});
- refreshArea();
- $('areaStatus').textContent='Initial boundary derived from the 1987 image coverage. Edit the polygon to refine the actual testing region.';
-}
-if(!polygons.length)map.fitBounds(photoBounds);
-activatePhoto();
-// Historical WMS fallback is optional, never required for setup.
 })();
 </script></body></html>
