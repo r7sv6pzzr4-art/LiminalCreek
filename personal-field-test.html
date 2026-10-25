@@ -267,10 +267,19 @@ map.setView(target.getCenter(),zoom,{animate:!reduceMotion,pan:{animate:!reduceM
  $('mapInstruction').hidden=false;
 }
 $('reset').onclick=()=>{
- if(!confirm('Permanently clear saved comparison history on this device? Export a copy first.'))return;
- const oldHistory=history,oldCurrent=current,oldSites=allSites;
- history=[];current=null;allSites=[];if(!saveLocal()){history=oldHistory;current=oldCurrent;allSites=oldSites;return}
- clearMarkers();$('question').style.display='none';$('status').textContent='Local test history cleared.';
+ if(!confirm('Clear all field-test answers and return to the opening feeling-selection screen? Export a JSON backup first.'))return;
+ const previous={history,current,allSites,feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling};
+ history=[];current=null;allSites=[];feelingChoices=[];feelingIndex=0;blockCount=0;blockGoal=0;pendingFeelingSwitch=false;selectedFeeling=null;
+ if(!saveLocal()){
+  ({history,current,allSites,feelingChoices,feelingIndex,blockCount,blockGoal,pendingFeelingSwitch,selectedFeeling}=previous);
+  return;
+ }
+ try{localStorage.removeItem(PREF_KEY)}catch(e){}
+ clearMarkers();$('question').style.display='none';
+ $('selectionSummary').hidden=true;$('impressionChooser').hidden=false;
+ map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
+ $('status').textContent='Test reset. Choose the feelings to explore.';
+ openFeelingModal('setup');
 };
 // Avoid repeatedly showing the same location. Recent sites have a larger
 // exclusion radius; older sites get a smaller one, preserving future coverage.
@@ -389,6 +398,6 @@ function restore(){
 }
 $('start').disabled=false;
 restore();
-if(!selectedFeeling&&!current)setDockCollapsed(true);
+// The opening feelings dock must remain expanded until the user retracts it.
 })();
 </script></body></html>
