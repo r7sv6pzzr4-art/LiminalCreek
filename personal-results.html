@@ -39,7 +39,7 @@ button{cursor:pointer;padding:9px 13px;font-weight:600}button:hover{background:#
 <div id="map" aria-label="Spatial results over the 1987 aerial photograph"></div>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="./adaptive-sampling-engine.js?v=3"></script>
+<script src="./adaptive-sampling-engine.js?v=4"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
@@ -105,7 +105,9 @@ async function render(){
   const model=new LiminalAdaptive.SpatialModel(area,subset);
   const box=bboxOf(area),lat=(box[1]+box[3])/2;
   const aspect=(box[2]-box[0])*Math.cos(lat*Math.PI/180)/(box[3]-box[1]);
-  const w=360,h=Math.max(180,Math.min(430,Math.round(w/aspect)));
+  // Display/export surface is a consistent geographic raster; this only
+  // improves visualization detail, NOT the spatial model's 42 m basis.
+  const w=520,h=Math.max(200,Math.min(650,Math.round(w/aspect)));
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d'),pixels=ctx.createImageData(w,h);
   for(let row=0;row<h;row++){
