@@ -5,7 +5,7 @@
    Ordinal strengths are conditioned as intervals, not equidistant ratings. */
 (function(root){
 'use strict';
-const VERSION='0.2', MAX=152.4, METERS=111195, pi=Math.PI;
+const VERSION='0.3', MAX=152.4, METERS=111195, pi=Math.PI;
 const cap=(x,a,b)=>Math.min(b,Math.max(a,x));
 const distance=(a,b)=>Math.hypot((a[0]-b[0])*METERS*Math.cos((a[1]+b[1])*pi/360),(a[1]-b[1])*METERS);
 function inside(p,geo){
@@ -143,10 +143,10 @@ class PersonalAdapter{
   const evidence=cap(range/(range+.75),0,1);
   const readiness=cap(model.count/(model.count+25)*evidence,0,1);
   const shares=[
-   ['explore',.75-.43*readiness],
-   ['peak',.08+.22*readiness],
+   ['explore',.75-.49*readiness],
+   ['peak',.08+.26*readiness],
    ['gradient',.12+.14*readiness],
-   ['valley',.05+.07*readiness]
+   ['valley',.05+.09*readiness]
   ];
   let mode='explore';
   if(model.count>=5){
@@ -275,6 +275,15 @@ class PersonalAdapter{
     peakValleyCalibrationCandidate=true;
    }
   }
+  // Additional, cautiously qualified magnitude calibration opportunity.
+  // A well-sampled high/low contrast can be useful even when a true
+  // topographic saddle has not yet been demonstrated. Keep this distinct
+  // from the stronger, explicit peak–valley classification above.
+  const localSupport=p=>perFeeling.filter(q=>distance(q,p)<65).length;
+  const spatialContrastCalibrationCandidate=!peakValleyCalibrationCandidate
+    &&model.count>=22&&(mode==='gradient'||mode==='valley')
+    &&best.len>=45&&Math.abs(best.diff.mean)>=.75&&best.diff.sd<=1.15
+    &&localSupport(best.p)>=2&&localSupport(best.q)>=2;
   const swap=rng()<.5;
   return {
    A:swap?best.q:best.p,B:swap?best.p:best.q,referenceIsA:!swap,
@@ -284,7 +293,8 @@ class PersonalAdapter{
     expectedDifference:+Math.abs(best.diff.mean).toFixed(3),
     differenceUncertainty:+best.diff.sd.toFixed(3),
     ...(contourSourceIndex!==null?{contourSourceIndex}:{}),
-    ...(peakValleyCalibrationCandidate?{peakValleyCalibrationCandidate:true}:{})
+    ...(peakValleyCalibrationCandidate?{peakValleyCalibrationCandidate:true}:{}),
+    ...(spatialContrastCalibrationCandidate?{spatialContrastCalibrationCandidate:true}:{})
    }
   };
  }
