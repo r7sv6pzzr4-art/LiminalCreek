@@ -5,7 +5,7 @@
    Ordinal strengths are conditioned as intervals, not equidistant ratings. */
 (function(root){
 'use strict';
-const VERSION='0.1', MAX=152.4, METERS=111195, pi=Math.PI;
+const VERSION='0.2', MAX=152.4, METERS=111195, pi=Math.PI;
 const cap=(x,a,b)=>Math.min(b,Math.max(a,x));
 const distance=(a,b)=>Math.hypot((a[0]-b[0])*METERS*Math.cos((a[1]+b[1])*pi/360),(a[1]-b[1])*METERS);
 function inside(p,geo){
@@ -224,6 +224,57 @@ class PersonalAdapter{
    }
   }
   if(!best)throw Error('Unable to find distinct nearby locations');
+  let contourSourceIndex=null;
+  // Rare, minimally intrusive follow-up to a *nearby equal* response:
+  // sample across (rather than along) its possible intensity contour.
+  // Equality alone does NOT prove that a contour or a gradient exists.
+  if(mode==='gradient'&&model.count>=10&&rng()<.2){
+   const used=new Set(history.slice(-35).map(h=>h.sampling?.contourSourceIndex).filter(Number.isInteger));
+   const possible=history.map((h,index)=>({h,index})).slice(-55)
+    .filter(({h,index})=>h.feeling===feeling&&h.answer==='equal'&&!used.has(index)
+      &&distance(h.A,h.B)>=20&&distance(h.A,h.B)<=110);
+   // Only replace an ordinary gradient proposal if both new locations
+   // meet all the original spacing, polygon and pair-length requirements.
+   for(let trial=0;trial<Math.min(8,possible.length*3);trial++){
+    const {h,index}=possible[Math.floor(rng()*possible.length)];
+    const mid=[(h.A[0]+h.B[0])/2,(h.A[1]+h.B[1])/2];
+    const cos=Math.cos(mid[1]*pi/180);
+    const dx=(h.B[0]-h.A[0])*METERS*cos,dy=(h.B[1]-h.A[1])*METERS;
+    const len=Math.hypot(dx,dy),theta=(rng()-.5)*.38;
+    const nx=(-dy*Math.cos(theta)-dx*Math.sin(theta))/len;
+    const ny=(dx*Math.cos(theta)-dy*Math.sin(theta))/len;
+    const radius=25+rng()*29;
+    const p=[mid[0]+radius*nx/(METERS*cos),mid[1]+radius*ny/METERS];
+    const q=[mid[0]-radius*nx/(METERS*cos),mid[1]-radius*ny/METERS];
+    const dd=distance(p,q);
+    if(!valid(p,false)||!valid(q,false)||dd<16||dd>this.maxDistance)continue;
+    if(model.compare(p,q).sd<.3)continue;
+    best={p,q,len:dd,diff:model.compare(p,q)};
+    mode='contour';contourSourceIndex=index;
+    break;
+   }
+  }
+  // A valley-labelled pair is not automatically a peak-to-valley
+  // contrast. Require a separately supported midpoint depression and
+  // observed coverage near both candidate peaks and the midpoint.
+  let peakValleyCalibrationCandidate=false;
+  if(mode==='valley'&&bridge&&model.count>=22){
+   const first=bridge[0].p,last=bridge[1].p;
+   const mid=[(first[0]+last[0])/2,(first[1]+last[1])/2];
+   const midMean=model.estimate(mid).mean;
+   const crest=Math.min(model.estimate(first).mean,model.estimate(last).mean);
+   const drop=crest-midMean;
+   const support=(p)=>perFeeling.filter(site=>distance(site,p)<65).length;
+   const matches=(a,b)=>(distance(a,mid)<42
+     &&(distance(b,first)<45||distance(b,last)<45));
+   const contrast=best.diff;
+   if(drop>.65&&drop>.6*Math.max(model.compare(first,mid).sd,model.compare(last,mid).sd)
+      &&support(mid)>=2&&support(first)>=2&&support(last)>=2
+      &&(matches(best.p,best.q)||matches(best.q,best.p))
+      &&Math.abs(contrast.mean)>.65+.7*contrast.sd){
+    peakValleyCalibrationCandidate=true;
+   }
+  }
   const swap=rng()<.5;
   return {
    A:swap?best.q:best.p,B:swap?best.p:best.q,referenceIsA:!swap,
@@ -231,7 +282,9 @@ class PersonalAdapter{
     model:'liminal-multiscale-bayes',version:VERSION,objective:mode,
     distanceMeters:+best.len.toFixed(1),trainingCount:model.count,
     expectedDifference:+Math.abs(best.diff.mean).toFixed(3),
-    differenceUncertainty:+best.diff.sd.toFixed(3)
+    differenceUncertainty:+best.diff.sd.toFixed(3),
+    ...(contourSourceIndex!==null?{contourSourceIndex}:{}),
+    ...(peakValleyCalibrationCandidate?{peakValleyCalibrationCandidate:true}:{})
    }
   };
  }
