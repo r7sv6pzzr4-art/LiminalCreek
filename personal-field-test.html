@@ -94,6 +94,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 #magnitudeCard p{font-size:.89rem;color:#c8dbce;margin:0 0 15px}
 #magnitudeChoices{display:grid;grid-template-columns:1fr;gap:9px}
 #magnitudeChoices button{text-align:center;margin:0;font-weight:600}
+#magnitudeReview{background:#315e4d;text-align:center;font-weight:600;margin-top:12px}
+#magnitudeReturn[hidden]{display:none}
+#magnitudeReturn{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:2050;\n width:min(370px,calc(100vw - 28px));text-align:center;\n background:#1d4938;border:2px solid #c6e3cc;box-shadow:0 3px 18px #001b1688;font-weight:650}
 #magnitudeSkip{background:transparent!important;border:0!important;
  color:#c0d3c4;text-decoration:underline;text-align:center;font-size:.85rem;
  padding:10px;margin-top:8px}
@@ -111,8 +114,10 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
    <button type="button" data-magnitude="noticeably">Noticeably stronger</button>
    <button type="button" data-magnitude="much">Much stronger</button>
   </div>
+  <button type="button" id="magnitudeReview">View A and B on map</button>
   <button type="button" id="magnitudeSkip">Skip</button>
  </div></div>
+<button type="button" id="magnitudeReturn" hidden>Back to intensity question</button>
 <div id="map"></div><div id="mapInstruction" role="group" aria-label="Compare two locations" hidden><strong>Tap the dot where the feeling is stronger</strong><div class="quickChoices"><button type="button" id="quickEqual">≈ Both are similar</button><button type="button" id="quickNeither">∅ Neither associated with the feeling</button></div></div>
 
 <main id="bottomPanel" class="dock-collapsed">
@@ -372,10 +377,34 @@ function shouldAskMagnitude(answer,pair){
 }
 function showMagnitudePrompt(){
  if(pendingMagnitude===null)return;
+ $('magnitudeReturn').hidden=true;
  $('magnitudeNotice').hidden=false;
  clearMarkers();
  setTimeout(()=>document.querySelector('[data-magnitude="slightly"]').focus(),0);
 }
+// Keep the already-recorded A/B choice intact while reviewing the dots.
+// The review markers deliberately have no click action and cannot submit
+// a second response. Magnitude selection is resumed with one button.
+$('magnitudeReview').onclick=()=>{
+ if(pendingMagnitude===null)return;
+ const record=history[pendingMagnitude];
+ if(!record)return;
+ clearMarkers();
+ for(const [point,letter,color] of [[record.A,'A','#55b7ec'],[record.B,'B','#f1ad65']]){
+  const icon=L.divIcon({className:'',html:'<div style="width:44px;height:44px;border-radius:50%;background:'+color+';border:2px solid white;text-align:center;line-height:40px;font-weight:bold;font-size:19px;color:#172b25;box-shadow:0 1px 8px #333">'+letter+'</div>',iconSize:[44,44],iconAnchor:[22,22]});
+  markers.push(L.marker([point[1],point[0]],{icon,keyboard:false,interactive:false}).addTo(map));
+ }
+ const target=L.latLngBounds([[record.A[1],record.A[0]],[record.B[1],record.B[0]]]);
+ const zoom=Math.min(19,map.getBoundsZoom(target,false,L.point(86,86)));
+ map.stop();map.setView(target.getCenter(),zoom,{animate:false});
+ $('magnitudeNotice').hidden=true;
+ $('magnitudeReturn').hidden=false;
+ setTimeout(()=>map.invalidateSize(),0);
+};
+$('magnitudeReturn').onclick=()=>{
+ if(pendingMagnitude===null)return;
+ showMagnitudePrompt();
+};
 function afterAnswer(){
  if(pendingMagnitude!==null){showMagnitudePrompt();return}
  if(pendingFeelingSwitch){clearMarkers();showRotationNotice()}
@@ -394,6 +423,8 @@ function resolveMagnitude(value){
   pendingMagnitude=old;record.magnitude=prev.magnitude;record.magnitudeSkipped=prev.magnitudeSkipped;return;
  }
  $('magnitudeNotice').hidden=true;
+ $('magnitudeReturn').hidden=true;
+ clearMarkers();
  afterAnswer();
 }
 document.querySelectorAll('[data-magnitude]').forEach(b=>b.onclick=()=>resolveMagnitude(b.dataset.magnitude));
