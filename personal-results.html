@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek · Map results</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#102820;color:#eaf5e9;font:15px system-ui}
+header{padding:12px 16px;background:#1d4435;display:flex;justify-content:space-between;gap:12px;align-items:center}
+h1{font:1.3rem Georgia,serif;margin:0}a{color:#d6efc0}
+main{display:flex;flex-direction:column;height:calc(100% - 61px)}
+.controls{padding:10px 14px;background:#18392e;display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:.81rem;color:#d0e4d5}
+select,input,button{font:inherit;color:#f5fff5;background:#285a46;border:1px solid #87af9a;border-radius:7px;min-height:41px;padding:7px}
+input[type=file]{max-width:205px;font-size:.8rem}input[type=range]{padding:0;min-height:38px}
+button{cursor:pointer;padding:9px 13px;font-weight:600}button:hover{background:#38765a}
+#map{flex:1;min-height:270px;background:#294237}
+.note{padding:7px 13px;background:#18392e;font-size:.8rem;color:#d0e3d4}
+#status{color:#f3e7b3;min-height:1.1em}
+#key{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+#ramp{width:125px;height:12px;background:linear-gradient(90deg,#326ca7,#f6f6ec,#b34c30);border-radius:3px}
+.row{display:flex;align-items:center;gap:7px}
+@media(max-width:560px){header{padding:9px 11px}h1{font-size:1.1rem}.controls{gap:8px;padding:8px}.controls label{flex:1;min-width:130px}#map{min-height:200px}}
+</style></head><body>
+<header><h1>LiminalCreek · Map results</h1><a href="./personal-field-test.html">Return to personal test</a></header>
+<main>
+<section class="controls">
+ <label>Source <select id="source"><option value="saved">This device · saved test</option><option value="import">Imported JSON</option></select></label>
+ <label>Import earlier run <input type="file" id="import" accept=".json,application/json"></label>
+ <label>Feeling <select id="feeling"></select></label>
+ <label>Snapshot <select id="snapshot"></select></label>
+ <label>Map <select id="metric"><option value="mean">Relative feeling strength</option><option value="sd">Model uncertainty</option></select></label>
+ <label>Overlay opacity <input type="range" id="opacity" min="0" max="100" value="75"></label>
+ <label class="row" style="flex-direction:row;align-items:center;min-height:42px"><input id="points" type="checkbox"> Show chosen points</label>
+ <button id="download" type="button">Download PNG map</button>
+</section>
+<div class="note"><span id="summary">Reading saved observations…</span> · <span id="key"><span>Low</span><span id="ramp"></span><span>High</span></span><br>
+ <span>Color range is fixed across runs. Values are relative model scores, not absolute measurements. Snapshots use only the first N answers for each feeling. Importing does not modify your saved test.</span><br>
+ <span id="status" role="status"></span>
+</div>
+<div id="map" aria-label="Spatial results over the 1987 aerial photograph"></div>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="./adaptive-sampling-engine.js?v=3"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const KEY='liminal-personal-adaptive-fieldtest-v1';
+const photoBounds=[[40.346256771,-74.172214460],[40.351719119,-74.162024166]];
+const photoUrl='./trapp-1987.png';
+const defaultArea={type:'Polygon',coordinates:[[[-74.16754493287007,40.34707234002636],[-74.16773535318367,40.348214796349694],[-74.16726431600652,40.34935249153645],[-74.16627984935174,40.35018280864308],[-74.1652773177937,40.350525264902736],[-74.16387925328081,40.350754426055246],[-74.1630269713535,40.349643985455984],[-74.1625542009098,40.34796561219721],[-74.16405443770545,40.347614420457916],[-74.16567546636871,40.3473691903959],[-74.16681484472115,40.34719054204395],[-74.16679187871617,40.34719621603167],[-74.16754493287007,40.34707234002636]]]};
+const map=L.map('map',{zoomControl:true}).fitBounds(defaultArea.coordinates[0].map(p=>[p[1],p[0]]));
+L.tileLayer.wms('https://img.nj.gov/imagerywms/BlackWhite1930?',{layers:'BlackWhite1930',version:'1.1.1',format:'image/png',transparent:false,maxZoom:20,attribution:'1930s imagery: NJDEP'}).addTo(map);
+L.imageOverlay(photoUrl,photoBounds,{interactive:false,opacity:1}).addTo(map);
+let heat=null,pointsLayer=L.layerGroup().addTo(map),saved=null,imported=null,serial=0,last=null;
+const asPolygon=x=>x?.type==='FeatureCollection'?x.features?.[0]?.geometry:x?.type==='Feature'?x.geometry:x;
+function parseSource(source){
+ if(!source||typeof source!=='object')throw Error('Not a valid test export.');
+ const history=source.history||source.comparisons;
+ if(!Array.isArray(history))throw Error('No comparison history in this file.');
+ const h=history.filter(x=>x&&Array.isArray(x.A)&&Array.isArray(x.B)&&x.A.length===2&&x.B.length===2&&typeof x.feeling==='string'&&['A','B','equal','neither'].includes(x.answer)&&x.A.concat(x.B).every(Number.isFinite));
+ let area=asPolygon(source.area)||defaultArea;
+ if(!area||area.type!=='Polygon'||!Array.isArray(area.coordinates))area=defaultArea;
+ return {history:h,area};
+}
+function getSaved(){try{const raw=localStorage.getItem(KEY);return raw?parseSource(JSON.parse(raw)):null}catch(e){$('status').textContent='Saved data unreadable: '+e.message;return null}}
+function currentSource(){return $('source').value==='import'?imported:saved}
+function chooseSource(){
+ const data=currentSource();
+ if(!data){$('feeling').replaceChildren();$('snapshot').replaceChildren();$('summary').textContent='No comparisons for this source.';last=null; if(heat){map.removeLayer(heat);heat=null}pointsLayer.clearLayers();return}
+ const prev=$('feeling').value;const feelings=[...new Set(data.history.map(h=>h.feeling))];
+ $('feeling').replaceChildren();
+ for(const feeling of feelings){const option=document.createElement('option');option.value=feeling;option.textContent=feeling;$('feeling').append(option)}
+ if(feelings.includes(prev))$('feeling').value=prev;
+ chooseSnapshot();
+}
+function chooseSnapshot(){
+ const data=currentSource(),feeling=$('feeling').value;if(!data||!feeling)return;
+ const n=data.history.filter(x=>x.feeling===feeling).length;
+ const previous=Number($('snapshot').value)||n;
+ const choices=[...new Set([25,50,75,100,125,150,200,250,300,400,500,750,1000,n].filter(x=>x>0&&x<=n))].sort((a,b)=>a-b);
+ $('snapshot').replaceChildren();
+ for(const c of choices){const opt=document.createElement('option');opt.value=c;opt.textContent=c===n?'All '+n+' comparisons': 'First '+c;$('snapshot').append(opt)}
+ $('snapshot').value=choices.includes(previous)?previous:n;
+ render();
+}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function gradient(t){
+ t=clamp(t,0,1);
+ // Fixed diverging palette: blue (lower) — nearly white (neutral) — rust (higher).
+ const low=[50,108,167],mid=[246,246,236],high=[179,76,48];
+ const a=t<.5?low:mid,b=t<.5?mid:high,f=t<.5?t*2:(t-.5)*2;
+ return [0,1,2].map(i=>Math.round(a[i]*(1-f)+b[i]*f));
+}
+function sdColor(t){t=clamp(t,0,1);return [Math.round(32+214*t),Math.round(67+158*t),Math.round(100+28*t)]}
+function bboxOf(area){const p=area.coordinates[0];return [Math.min(...p.map(a=>a[0])),Math.min(...p.map(a=>a[1])),Math.max(...p.map(a=>a[0])),Math.max(...p.map(a=>a[1]))]}
+const delay=()=>new Promise(resolve=>setTimeout(resolve,0));
+async function render(){
+ const data=currentSource(),feeling=$('feeling').value;if(!data||!feeling)return;
+ const generation=++serial;
+ const subset=data.history.filter(h=>h.feeling===feeling).slice(0,Number($('snapshot').value));
+ const area=data.area,metric=$('metric').value;
+ $('status').textContent='Calculating spatial surface using the live adaptive model…';
+ $('download').disabled=true;
+ try{
+  if(!window.LiminalAdaptive)throw Error('Adaptive model unavailable');
+  const model=new LiminalAdaptive.SpatialModel(area,subset);
+  const box=bboxOf(area),lat=(box[1]+box[3])/2;
+  const aspect=(box[2]-box[0])*Math.cos(lat*Math.PI/180)/(box[3]-box[1]);
+  const w=360,h=Math.max(180,Math.min(430,Math.round(w/aspect)));
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d'),pixels=ctx.createImageData(w,h);
+  for(let row=0;row<h;row++){
+   if(generation!==serial)return;
+   const y=box[3]-(row+.5)/h*(box[3]-box[1]);
+   for(let col=0;col<w;col++){
+    const x=box[0]+(col+.5)/w*(box[2]-box[0]),p=[x,y];
+    if(!LiminalAdaptive.inside(p,area))continue;
+    const prediction=model.estimate(p);
+    const c=metric==='mean'?gradient((prediction.mean+2.5)/5):sdColor(prediction.sd/1.6);
+    const i=(row*w+col)*4;
+    pixels.data[i]=c[0];pixels.data[i+1]=c[1];pixels.data[i+2]=c[2];pixels.data[i+3]=255;
+   }
+   if(row%16===0)await delay();
+  }
+  if(generation!==serial)return;
+  ctx.putImageData(pixels,0,0);
+  const overlayBounds=[[box[1],box[0]],[box[3],box[2]]];
+  if(heat)map.removeLayer(heat);
+  heat=L.imageOverlay(canvas.toDataURL('image/png'),overlayBounds,{opacity:Number($('opacity').value)/100,interactive:false}).addTo(map);
+  const corners=area.coordinates[0].map(p=>[p[1],p[0]]);
+  pointsLayer.clearLayers();
+  L.polygon(corners,{color:'#d9e9b3',weight:2,fill:false,interactive:false}).addTo(pointsLayer);
+  if($('points').checked){
+   for(const q of subset){
+    if(q.answer!=='A'&&q.answer!=='B')continue;
+    const p=q.answer==='A'?q.A:q.B;
+    L.circleMarker([p[1],p[0]],{radius:3,color:'#102820',weight:.7,fillColor:'#ffe169',fillOpacity:.85,interactive:false}).addTo(pointsLayer);
+   }
+  }
+  last={canvas,box,subset,feeling,metric,area,source:$('source').value};
+  $('summary').textContent=subset.length+' observations · '+feeling+' · engine '+LiminalAdaptive.VERSION;
+  $('ramp').style.background=metric==='mean'?'linear-gradient(90deg,#326ca7,#f6f6ec,#b34c30)':'linear-gradient(90deg,#204364,#f6e180)';
+  $('key').firstElementChild.textContent=metric==='mean'?'−2.5':'0';
+  $('key').lastElementChild.textContent=metric==='mean'?'+2.5':'1.6+';
+  $('status').textContent='Ready · consistent geographic grid and fixed color scale. Export includes the 1987 photo.';
+  $('download').disabled=false;
+ }catch(e){if(generation===serial){$('status').textContent='Could not draw map: '+e.message;$('download').disabled=true}}
+}
+$('source').onchange=chooseSource;
+$('feeling').onchange=chooseSnapshot;
+$('snapshot').onchange=render;
+$('metric').onchange=render;
+$('points').onchange=render;
+$('opacity').oninput=()=>{if(heat)heat.setOpacity(Number($('opacity').value)/100)};
+$('import').onchange=async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ try{
+  if(file.size>30000000)throw Error('File too large');
+  imported=parseSource(JSON.parse(await file.text()));
+  $('source').value='import';
+  $('status').textContent='Loaded '+file.name+' locally; no data uploaded.';
+  chooseSource();
+ }catch(err){$('status').textContent='Could not import: '+err.message}
+};
+function geoPixel(p,width,height){
+ return [(p[0]-photoBounds[0][1])/(photoBounds[1][1]-photoBounds[0][1])*width,
+         (photoBounds[1][0]-p[1])/(photoBounds[1][0]-photoBounds[0][0])*height];
+}
+$('download').onclick=async()=>{
+ if(!last)return;
+ const snapshot=last;
+ $('download').disabled=true;$('status').textContent='Preparing PNG…';
+ try{
+  const photo=new Image();photo.src=photoUrl;await photo.decode();
+  const w=photo.naturalWidth,h=photo.naturalHeight,footer=128;
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h+footer;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#173729';ctx.fillRect(0,0,w,h+footer);
+  ctx.drawImage(photo,0,0,w,h);
+  const p=geoPixel([snapshot.box[0],snapshot.box[3]],w,h),q=geoPixel([snapshot.box[2],snapshot.box[1]],w,h);
+  ctx.globalAlpha=Number($('opacity').value)/100;ctx.drawImage(snapshot.canvas,p[0],p[1],q[0]-p[0],q[1]-p[1]);ctx.globalAlpha=1;
+  const ring=snapshot.area.coordinates[0];ctx.beginPath();
+  ring.forEach((point,i)=>{const xy=geoPixel(point,w,h);if(i===0)ctx.moveTo(...xy);else ctx.lineTo(...xy)});
+  ctx.closePath();ctx.strokeStyle='#eef6b6';ctx.lineWidth=3;ctx.stroke();
+  if($('points').checked){ctx.fillStyle='#ffe169';ctx.strokeStyle='#143328';ctx.lineWidth=2;
+   for(const obs of snapshot.subset){if(!['A','B'].includes(obs.answer))continue;
+    const p=geoPixel(obs.answer==='A'?obs.A:obs.B,w,h);ctx.beginPath();ctx.arc(...p,5,0,Math.PI*2);ctx.fill();ctx.stroke()}
+  }
+  ctx.fillStyle='#f2f7e9';ctx.font='bold 27px system-ui';
+  const label=snapshot.feeling.length>85?snapshot.feeling.slice(0,82)+'…':snapshot.feeling;
+  ctx.fillText(label,26,h+38);
+  ctx.font='20px system-ui';ctx.fillStyle='#c2dec8';
+  ctx.fillText(snapshot.subset.length+' observations · '+(snapshot.metric==='mean'?'relative strength (fixed −2.5 to +2.5)':'model uncertainty (0 to 1.6+)')+' · engine '+LiminalAdaptive.VERSION,26,h+73);
+  ctx.font='16px system-ui';ctx.fillText('1987 NJ aerial · exploratory spatial reconstruction · '+(snapshot.source==='saved'?'saved browser test':'imported JSON')+' · not an absolute measurement',26,h+103);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  if(!blob)throw Error('PNG export failed');
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='LiminalCreek_'+snapshot.feeling.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,34)+'_'+snapshot.subset.length+'_'+snapshot.metric+'.png';
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  $('status').textContent='PNG exported at native 1987 photograph resolution ('+w+' × '+(h+footer)+').';
+ }catch(e){$('status').textContent='Download failed: '+e.message}
+ finally{$('download').disabled=false}
+};
+saved=getSaved();
+if(!saved){$('status').textContent='No saved test on this browser. Import a previously exported JSON to view its maps.'}
+chooseSource();
+})();
+</script></body></html>
