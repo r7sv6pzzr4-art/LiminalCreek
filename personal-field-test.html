@@ -102,7 +102,28 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 #magnitudeSkip{background:transparent!important;border:0!important;
  color:#c0d3c4;text-decoration:underline;text-align:center;font-size:.85rem;
  padding:10px;margin-top:8px}
+
+/* Intro appears only on a fresh/cleared personal test. No data or study logic. */
+#intro[hidden]{display:none!important}
+#intro{position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;
+ background:#b8a288;overflow-y:auto;padding:clamp(14px,4vw,40px)}
+#introBackdrop{position:absolute;inset:0;background-image:url('./trapp-sketch.jpg');
+ background-size:cover;background-position:center;filter:brightness(.88)}
+#intro::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#17221e22,#1b251733 28%,#101b14a6 100%);pointer-events:none}
+#introCard{z-index:1;position:relative;width:min(680px,100%);padding:clamp(24px,5vw,46px);
+ background:#10231ad1;border:1px solid #f2e9d3a8;border-radius:16px;
+ box-shadow:0 12px 48px #09181378;text-align:center}
+#introCard p{font:clamp(1.35rem,3.6vw,2.15rem)/1.42 Georgia,serif;color:#fff8df;margin:0 0 28px;
+ text-wrap:balance;text-shadow:0 2px 6px #0008}
+#introOK{width:min(190px,100%);margin:auto;text-align:center;font-size:1.1rem;
+ font-weight:700;background:#e8d7a9;color:#25332b;border-color:#f9e6c4}
+#introOK:hover{background:#fff0c8}
 </style></head><body>
+<div id="intro" hidden role="dialog" aria-modal="true" aria-label="Welcome to the Trapp property">
+ <div id="introBackdrop" aria-hidden="true"></div>
+ <div id="introCard"><p>It’s 1987. Come explore the Trapp property around the 18th century Ramanessin Hill House and untangle the various feelings it evokes.</p>
+ <button id="introOK" type="button">OK</button></div>
+</div>
 <header><div id="brand"><h1>LiminalCreek · Personal comparison</h1><small>Independent field test · saved on this device</small></div><div id="headerFeeling" aria-live="polite" title="Feeling being mapped"><span class="feelingLabel">Mapping the feeling</span><span id="headerFeelingText">Choose an impression</span></div></header>
 <div id="rotationNotice" hidden role="dialog" aria-modal="true" aria-labelledby="rotationTitle">
  <div id="rotationCard"><div id="rotationTitle">Now testing</div><div id="rotationFeeling"></div>
@@ -168,6 +189,17 @@ const photoLayer=L.imageOverlay(photoUrl,photoBounds,{opacity:1,interactive:fals
 photoLayer.on('error',()=>{$('status').textContent='Could not load the 1987 photograph. Please reload.'});
 let polygons=[defaultBoundary.coordinates],history=[],current=null,markers=[],allSites=[];
 L.geoJSON(defaultBoundary,{style:{color:'#d9ecb0',weight:2,opacity:.72,fill:false,interactive:false}}).addTo(map);
+let introOpen=false;
+function showIntro(){
+ introOpen=true;$('intro').hidden=false;
+ $('feelingModal').hidden=true;
+ setTimeout(()=>$('introOK').focus(),0);
+}
+$('introOK').onclick=()=>{
+ if(!introOpen)return;
+ introOpen=false;$('intro').hidden=true;
+ openFeelingModal('setup');
+};
 const TEST_KEY='liminal-personal-adaptive-fieldtest-v1'; // Fresh run; original test remains intact in its original storage key
 const PREF_KEY='liminal-personal-adaptive-selected-feeling-v1';
 const DEFAULT_FEELINGS=[
@@ -337,7 +369,7 @@ $('reset').onclick=()=>{
 
  map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
  $('status').textContent='Test reset. Choose the feelings to explore.';
- openFeelingModal('setup');
+ showIntro();
 };
 // Personal adapter uses the reusable model; the shared study has its own,
 // as-yet-unmodified observation and assignment design.
@@ -486,7 +518,7 @@ function restore(){
    try{localStorage.removeItem(PREF_KEY)}catch(e){}
    map.fitBounds(L.latLngBounds(defaultBoundary.coordinates[0].map(p=>[p[1],p[0]])).pad(.06));
    saveLocal();
-   openFeelingModal('setup');
+   showIntro();
    $('status').textContent='Choose the feelings to explore.';
   }else if(pendingMagnitude!==null){
    selectedFeeling=history[pendingMagnitude].feeling;
