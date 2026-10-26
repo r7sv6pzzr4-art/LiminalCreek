@@ -52,7 +52,7 @@ for(let i=0;i<34;i++){
  contourHistory.push({A,B,answer:i%3===0?'equal':i%3===1?'A':'neither',feeling:'test'});
 }
 let contourCount=0;
-for(let i=0;i<95;i++){
+for(let i=0;i<180;i++){
  const pair=contourAdapter.propose(contourHistory,'test'),sep=API.distance(pair.A,pair.B);
  assert(API.inside(pair.A,contourArea)&&API.inside(pair.B,contourArea)&&sep<=152.400001,'Invalid contour sampling geometry');
  assert(!pair.sampling.peakValleyCalibrationCandidate||pair.sampling.objective==='valley','Calibration qualification leaked into unrelated sampling');
