@@ -39,3 +39,33 @@ const absent=new API.SpatialModel(area,[{A:hotspot,B:[-74.165,40.348],answer:'ne
 assert(absent.estimate(hotspot).mean<0,'Neither did not lower estimated association');
 console.log('PASS:',history.length,'comparisons, 500-ft limit, area boundary,');
 console.log('adaptive objectives',counts,'hotspot recovered');
+
+/* Conservative contour refinement: equality is a directional constraint,
+   not proof of a peak, and any follow-up must stay perpendicular and legal. */
+const contourArea={type:'Polygon',coordinates:[[[-74.16754,40.34708],[-74.1677,40.3482],[-74.1672,40.3494],[-74.1653,40.3505],[-74.163,40.35065],[-74.16255,40.348],[-74.16754,40.34708]]]};
+let contourSeed=1804;
+const contourRng=()=>((contourSeed=(contourSeed*1664525+1013904223)>>>0)/4294967296);
+const contourAdapter=new API.PersonalAdapter(contourArea,{random:contourRng});
+const contourHistory=[];
+for(let i=0;i<34;i++){
+ const A=contourAdapter.rand(),B=contourAdapter.rand(A,40);
+ contourHistory.push({A,B,answer:i%3===0?'equal':i%3===1?'A':'neither',feeling:'test'});
+}
+let contourCount=0;
+for(let i=0;i<95;i++){
+ const pair=contourAdapter.propose(contourHistory,'test'),sep=API.distance(pair.A,pair.B);
+ assert(API.inside(pair.A,contourArea)&&API.inside(pair.B,contourArea)&&sep<=152.400001,'Invalid contour sampling geometry');
+ assert(!pair.sampling.peakValleyCalibrationCandidate||pair.sampling.objective==='valley','Calibration qualification leaked into unrelated sampling');
+ if(pair.sampling.objective==='contour'){
+  contourCount++;
+  const original=contourHistory[pair.sampling.contourSourceIndex];
+  assert(original&&original.answer==='equal','Contour probe missing its original equal response');
+  const lat=(original.A[1]+original.B[1])/2,cos=Math.cos(lat*Math.PI/180);
+  const u=[(original.B[0]-original.A[0])*cos,original.B[1]-original.A[1]];
+  const v=[(pair.B[0]-pair.A[0])*cos,pair.B[1]-pair.A[1]];
+  const projection=Math.abs((u[0]*v[0]+u[1]*v[1])/(Math.hypot(...u)*Math.hypot(...v)));
+  assert(projection<.3,'Contour candidate not approximately perpendicular');
+ }
+}
+assert(contourCount>0,'No contour probes offered for nearby equal responses');
+console.log('PASS:',contourCount,'conservative perpendicular contour probes');
