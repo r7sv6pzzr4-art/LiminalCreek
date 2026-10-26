@@ -105,16 +105,17 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 
 /* Intro appears only on a fresh/cleared personal test. No data or study logic. */
 #intro[hidden]{display:none!important}
-#intro{position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;
+#intro{position:fixed;inset:0;z-index:3000;display:flex;align-items:flex-end;justify-content:center;
  background:#b8a288;overflow-y:auto;padding:clamp(14px,4vw,40px)}
-#introBackdrop{position:absolute;inset:0;background-image:url('./trapp-sketch.svg');
- background-size:cover;background-position:center;filter:brightness(.88)}
-#intro::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#17221e22,#1b251733 28%,#101b14a6 100%);pointer-events:none}
-#introCard{z-index:1;position:relative;width:min(680px,100%);padding:clamp(24px,5vw,46px);
- background:#10231ad1;border:1px solid #f2e9d3a8;border-radius:16px;
- box-shadow:0 12px 48px #09181378;text-align:center}
-#introCard p{font:clamp(1.35rem,3.6vw,2.15rem)/1.42 Georgia,serif;color:#fff8df;margin:0 0 28px;
- text-wrap:balance;text-shadow:0 2px 6px #0008}
+#introBackdrop{position:absolute;inset:0;background-image:url('./trapp-sketch.svg?v=2');
+ background-size:cover;background-position:center;filter:brightness(.95)}
+#intro::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#17221e08,#101d1526 55%,#101b14ac 100%);pointer-events:none}
+#introCard{z-index:1;position:relative;width:min(690px,100%);padding:clamp(20px,3vw,32px);
+ margin-bottom:min(3dvh,22px);background:#10231ab8;border:1px solid #f2e9d388;border-radius:16px;
+ backdrop-filter:blur(2px);box-shadow:0 9px 35px #09181358;text-align:center}
+#introCard p{font-family:'Snell Roundhand','Apple Chancery','URW Chancery L','Brush Script MT',cursive;
+ font-size:clamp(1.55rem,3vw,2.25rem);font-weight:500;line-height:1.38;letter-spacing:.008em;
+ color:#fff9e9;margin:0 0 20px;text-wrap:balance;text-shadow:0 2px 6px #000b}
 #introOK{width:min(190px,100%);margin:auto;text-align:center;font-size:1.1rem;
  font-weight:700;background:#e8d7a9;color:#25332b;border-color:#f9e6c4}
 #introOK:hover{background:#fff0c8}
