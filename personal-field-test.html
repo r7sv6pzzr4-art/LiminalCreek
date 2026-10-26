@@ -137,7 +137,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;pa
 <p class="tag">Prototype purpose: evaluate wording, map scale, two-dot workflow, and whether relative responses can guide candidate points. This is an exploratory heuristic, not a fitted spatial preference model. Test data stays in this browser until explicitly exported or cleared. No actual study observations are accessed.</p>
 </div></main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="./adaptive-sampling-engine.js?v=2"></script>
+<script src="./adaptive-sampling-engine.js?v=3"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
@@ -357,13 +357,17 @@ function next(){
 }
 let recording=false;
 function shouldAskMagnitude(answer,pair){
- if(answer!=='A'&&answer!=='B')return false;
- // Approximately one in ten winning choices, with a cooldown to avoid fatigue.
- const recent=history.slice(-8);
- if(recent.some(h=>h.magnitudePrompted))return false;
- const strategy=pair.sampling?.objective;
- const targeted=['peak','gradient','valley'].includes(strategy);
- return Math.random()<(targeted?.24:.13);
+ if(answer!=='A'&&answer!=='B')return null;
+ // Most calibration questions are randomly selected regardless of where
+ // the sampler is working. Keep the existing eight-comparison cooldown.
+ if(history.slice(-8).some(h=>h.magnitudePrompted))return null;
+ if(Math.random()<.13)return 'random';
+ // A small, separate *additional* opportunity applies only to independently
+ // evidence-qualified peak–valley pairs; not all peak/gradient/valley probes.
+ // When every pair qualifies, targeted prompts are still <= ~20% of prompts.
+ if(pair.sampling?.peakValleyCalibrationCandidate===true&&Math.random()<.038)
+  return 'peak-valley';
+ return null;
 }
 function showMagnitudePrompt(){
  if(pendingMagnitude===null)return;
@@ -397,11 +401,13 @@ function submitAnswer(answer){
  if(!current||recording||pendingMagnitude!==null||!['A','B','equal','neither'].includes(answer))return;
  recording=true;
  const pair=current,oldBlock=blockCount,oldSwitch=pendingFeelingSwitch;
- const prompt=shouldAskMagnitude(answer,pair);
- history.push({...pair,answer,magnitudePrompted:prompt,magnitude:null,magnitudeSkipped:false,respondedAt:new Date().toISOString()});
+ const promptSource=shouldAskMagnitude(answer,pair);
+ history.push({...pair,answer,magnitudePrompted:!!promptSource,
+  ...(promptSource?{magnitudePromptSource:promptSource}:{}),
+  magnitude:null,magnitudeSkipped:false,respondedAt:new Date().toISOString()});
  allSites.push(pair.A,pair.B);
  current=null;blockCount++;
- if(prompt)pendingMagnitude=history.length-1;
+ if(promptSource)pendingMagnitude=history.length-1;
  if(feelingChoices.length>1&&blockCount>=blockGoal)pendingFeelingSwitch=true;
  if(!saveLocal()){
   history.pop();allSites.splice(-2);current=pair;blockCount=oldBlock;
