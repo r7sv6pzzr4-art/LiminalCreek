@@ -144,3 +144,35 @@ test('relative personal mapping does not reuse initial intensity scores to rank 
   assert.throws(()=>personal.validateComparisonAnswer({feeling:'Creepy',choice:'invalid'},
     {allowedFeelings:['Creepy']}),/comparison/);
 });
+
+test('broad coverage sites are unchanged by private response labels at a fixed snapshot',()=>{
+ const strong=observations.map((o,i)=>({...o,
+   valence:i===20?'bad':'neutral',strength:i===20?4:null}));
+ const none=strong.map(o=>({...o,valence:'neutral',strength:null}));
+ const args={count:20,seed:'control-invariance',bounds,eligible,
+   existingPairs:original,batchIndex:1,adaptivePercent:50};
+ const a=adaptive.generateBatch({...args,observations:strong});
+ const b=adaptive.generateBatch({...args,observations:none});
+ const broad=x=>x.pairs.filter(p=>p.mode==='broad').map(p=>[p.A,p.B]);
+ assert.deepEqual(broad(a),broad(b));
+ assert.equal(broad(a).length,10);
+ assert.deepEqual(a.pairs.map(x=>x.mode).sort(),
+   b.pairs.map(x=>x.mode).sort());
+});
+test('locally strong observations elicit fine investigations instead of being averaged away',()=>{
+ const focal=original[45].A;
+ const rich=original.flatMap((p,i)=>[
+   {point:p.A,participant:'A',pairId:p.id,
+    valence:i===45?'bad':'neutral',strength:i===45?4:null},
+   {point:p.B,participant:'B',pairId:p.id,valence:'neutral',strength:null}
+ ]);
+ const quiet=rich.map(o=>({...o,valence:'neutral',strength:null}));
+ const args={count:20,seed:'local-hotspot',bounds,eligible,existingPairs:original,
+   adaptivePercent:75,batchIndex:3};
+ const selected=x=>x.pairs.filter(p=>p.mode==='interesting'
+   &&adaptive.distance(p.A,focal)<125).length;
+ const focused=selected(adaptive.generateBatch({...args,observations:rich}));
+ const baseline=selected(adaptive.generateBatch({...args,observations:quiet}));
+ assert(focused>=3,'Too few investigations around the known high response');
+ assert(focused>baseline,'Strong feeling did not increase local targeting');
+});
