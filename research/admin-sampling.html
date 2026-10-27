@@ -22,6 +22,17 @@ output{font-size:1.3rem;font-weight:700}
 <body><main>
 <h1>Sampling administration</h1>
 <p class="status"><strong>INACTIVE PROTOTYPE.</strong> This is a standalone preview, not linked to Supabase or the live LiminalCreek application. Changes here do not save or change study assignments.</p>
+<div class="status" style="padding:12px;border:1px solid #527060;border-radius:10px">
+<strong>Proposed default transition (draft only)</strong>
+<p>After both original 100 are complete: two independently frozen 20-pair batches
+of <strong>50% response-blind geographic gap filling / 50% response-informed</strong>
+(assigned pairs 101–140); then future batches default to
+<strong>25% gap filling / 75% response-informed</strong> (141 onward).</p>
+<p>First assess coverage using the actual eligible polygons and both participants’
+assigned sites, without exposing their coordinates or impressions. A later
+trusted coordinator must enforce the phase change. This screen does not do so
+automatically; the slider below is only a proposed future-batch override.</p>
+</div>
 <label for="adaptive">Adaptive sampling in future batches: <output id="percentage">50%</output></label>
 <input type="range" id="adaptive" min="0" max="100" step="5" value="50">
 <figure aria-label="Distribution of future sampling"><div id="randomBand"></div><div id="adaptiveBand"></div></figure>
