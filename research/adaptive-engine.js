@@ -86,7 +86,8 @@ function siteEvidence(candidate,observations){
   // to influence additional sampling.
   let total=0,high=0,quiet=0,low=0;
   let closestStrong=Infinity,closestQuiet=Infinity;
-  const groups=new Map();
+  let localStrong=0,localSites=0;
+  const pairs=new Map();
   for(const o of observations){
     const d=distance(candidate,o.point);
     if(d>750)continue;
@@ -94,22 +95,38 @@ function siteEvidence(candidate,observations){
     total+=w;high+=w*o.intensity;quiet+=w*(1-o.intensity);
     if(o.intensity>=0.75)closestStrong=Math.min(closestStrong,d);
     if(o.intensity<=0.25)closestQuiet=Math.min(closestQuiet,d);
-    const k=o.participant||'?';
-    const prev=groups.get(k)||{w:0,sum:0};
-    prev.w+=w;prev.sum+=w*o.intensity;groups.set(k,prev);
+    // A strong response at one location must not be erased by many distant
+    // neutral responses inside the much broader 190 m neighborhood.
+    localStrong=Math.max(localStrong,o.intensity*Math.exp(-0.5*(d/65)**2));
+    if(d<=85)localSites++;
+    if(o.pairId!=null&&d<=145){
+     if(!pairs.has(o.pairId))pairs.set(o.pairId,[]);
+     pairs.get(o.pairId).push(o);
+    }
     low+=w*(o.intensity<=0.25?1:0);
   }
   const interest=total?high/total:0;
   const neutral=total?quiet/total:0;
   const support=1-Math.exp(-total/2);
-  const means=[...groups.values()].filter(g=>g.w>0.25).map(g=>g.sum/g.w);
-  const disagreement=means.length>=2?Math.abs(means[0]-means[1]):0;
+  // "Uncertainty" uses nearby matched-pair contrasts, not differences
+  // between smoothed observer averages from geographically separated sites.
+  // Because the two sites are offset, contrast can reflect a true local
+  // gradient; do NOT label it proof of disagreement between people.
+  let pairedContrast=0;
+  for(const pair of pairs.values()){
+   if(pair.length<2||pair[0].participant===pair[1].participant)continue;
+   if(distance(pair[0].point,pair[1].point)>60.97)continue;
+   const midpoint=[(pair[0].point[0]+pair[1].point[0])/2,
+                   (pair[0].point[1]+pair[1].point[1])/2];
+   pairedContrast=Math.max(pairedContrast,Math.abs(pair[0].intensity-pair[1].intensity)
+     *Math.exp(-0.5*(distance(candidate,midpoint)/90)**2));
+  }
   const mixed=total?Math.min(high,low)/total:0;
   // Prefer the periphery of strong responses, not their precise centers.
   const peripheral=Number.isFinite(closestStrong)
     ?Math.exp(-0.5*((closestStrong-85)/65)**2):0;
-  return {interest,neutral,support,disagreement,mixed,peripheral,
-    closestStrong,closestQuiet,localWeight:total};
+  return {interest,neutral,support,pairedContrast,localStrong,localSites,
+    mixed,peripheral,closestStrong,closestQuiet,localWeight:total};
 }
 function pointInBounds(point,bounds){
   return point[0]>=bounds[0]&&point[0]<=bounds[2]&&point[1]>=bounds[1]&&point[1]<=bounds[3];
@@ -135,10 +152,10 @@ function buildPool({bounds,eligible,observations,existingPoints,count,rng}){
   for(let i=0;i<target*35&&pool.length<target;i++)accept(randomInBounds(bounds,rng));
   // Seed additional proposals around observations to avoid missing a tiny
   // hotspot in a very large eligible landscape.
-  const anchorOrder=shuffled(observations,rng);
+  const anchorOrder=shuffled(observations.filter(o=>o.intensity>=.75),rng);
   for(const o of anchorOrder){
-    for(let i=0;i<30;i++){
-      const metres=25+225*Math.sqrt(rng());
+    for(let i=0;i<18;i++){
+      const metres=15+115*Math.sqrt(rng());
       accept(offset(o.point,2*Math.PI*rng(),metres));
     }
   }
@@ -147,9 +164,11 @@ function buildPool({bounds,eligible,observations,existingPoints,count,rng}){
 }
 function priority(mode,site){
   const e=site.evidence;
-  if(mode==='interesting')return 0.08+1.7*e.peripheral*(0.25+e.interest)+0.2*e.interest;
-  if(mode==='uncertain')return 0.1+0.9*(1-e.support)*Math.min(1,e.localWeight+0.3)
-    +0.7*e.mixed+0.7*e.disagreement;
+  if(mode==='interesting')return 0.08+1.5*e.peripheral*(0.25+e.interest)
+    +1.2*e.localStrong+0.18*e.interest;
+  if(mode==='uncertain')return 0.1+0.8*(1-e.support)*Math.min(1,e.localWeight+0.3)
+    +0.5*e.mixed+0.95*e.pairedContrast
+    +0.25*e.localStrong*(e.localSites<=1?1:0);
   if(mode==='quiet')return 0.08+1.1*e.neutral*e.support
     *(1-Math.min(1,e.interest))+(Number.isFinite(e.closestQuiet)?0.25:0);
   return 1;
@@ -199,12 +218,26 @@ function generateBatch(options){
     &&Math.abs(Object.values(effectiveModes).reduce((a,b)=>a+b,0)-1)<1e-8,'Invalid mode weights');
   const obs=normalizedObservations(observations);
   const used=previousPoints(existingPairs);
-  const rng=rngFor(seed);
-  const pool=buildPool({bounds,eligible,observations:obs,existingPoints:used,count,rng});
-  const output=[], slots=shuffled(modeCounts(count,effectiveModes)
-    .flatMap(({mode,count:n})=>Array(n).fill(mode)),rng);
+  // Generate all broad/coverage-control locations BEFORE response-informed
+  // locations, from a completely independent candidate pool and RNG.
+  // For the same prior assignment geometry and seed, broad sites therefore
+  // cannot move when an observation's valence or intensity changes.
+  const broadRng=rngFor(String(seed)+'-coverage');
+  const adaptiveRng=rngFor(String(seed)+'-adaptive');
+  const totals=modeCounts(count,effectiveModes);
+  const broadCount=totals.find(x=>x.mode==='broad').count;
+  const controlPool=broadCount?buildPool({
+    bounds,eligible,observations:[],existingPoints:used,count,rng:broadRng}):[];
+  const adaptivePool=broadCount<count?buildPool({
+    bounds,eligible,observations:obs,existingPoints:used,count,rng:adaptiveRng}):[];
+  const adaptiveSlots=shuffled(totals.filter(x=>x.mode!=='broad')
+    .flatMap(({mode,count:n})=>Array(n).fill(mode)),adaptiveRng);
+  const slots=[...Array(broadCount).fill('broad'),...adaptiveSlots];
+  const output=[];
   for(let j=0;j<slots.length;j++){
-    const mode=slots[j];
+    const mode=slots[j],isControl=mode==='broad';
+    const pool=isControl?controlPool:adaptivePool;
+    const rng=isControl?broadRng:adaptiveRng;
     let chosen=null,best=-Infinity;
     for(const item of pool){
       if(item.taken)continue;
@@ -213,8 +246,12 @@ function generateBatch(options){
       const minNew=output.length?Math.min(...output.map(p=>distance(item.point,p.A))):Infinity;
       if(minNew<25)continue;
       // Broad sites are spatial controls: prefer novel, well-spaced coverage.
-      const spread=Math.min(1,(Math.min(minUsed,minNew))/240);
-      const score=mode==='broad'?spread+0.3*rng():
+      const gapDistance=Math.min(minUsed,minNew);
+      const spread=Math.min(1,gapDistance/240);
+      // Coverage-directed controls are RESPONSE-BLIND, not uniformly random.
+      // Do not cap the hole score at 240 m: larger unsampled gaps should
+      // remain distinguishable. Random jitter avoids rigid grids.
+      const score=isControl?Math.log1p(Math.min(gapDistance,2000)/90)+0.10*rng():
         priority(mode,item)*(0.45+0.55*spread)*(0.88+0.24*rng());
       if(score>best){best=score;chosen=item;}
     }
@@ -227,8 +264,12 @@ function generateBatch(options){
       A:chosen.point.slice(),B:b,maximumSeparationMeters:maxDist});
     used.push(chosen.point,b);
   }
-  return {version:1,batchIndex,seed:String(seed),count:output.length,
-    modes:{...effectiveModes},adaptivePercent:adaptivePercent??null,pairs:output,
+  // Interleave controls with response-informed sites in a deterministic
+  // private order. Selection was separated to protect controls from bias.
+  const pairs=shuffled(output,rngFor(String(seed)+'-presentation'))
+    .map((p,i)=>({...p,id:'adaptive-'+batchIndex+'-'+(i+1)}));
+  return {version:2,batchIndex,seed:String(seed),count:pairs.length,
+    modes:{...effectiveModes},adaptivePercent:adaptivePercent??null,pairs,
     // A trusted staging service persists these rows atomically and permanently.
     // Never overwrite a staged batch or write to the live assignments table here.
     staged:true};
