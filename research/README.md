@@ -14,13 +14,37 @@ regenerate or renumber the original 100 pairs.**
 
 - Wait for **both participants to complete all their original 100 assigned
   locations**, even though their original order differs.
-- Adaptive generation is private, periodic, and silent. Start with **20
-  matched pairs per frozen batch**, each based on a recorded observation snapshot.
-- Up to **200 ft** between paired locations for broad sampling; reduce
-  separation for interesting/uncertain regions when useful.
-- Indicative selection: 35% potentially interesting regions/peripheries;
-  25% uncertainty or observer disagreement; 15% apparently uninteresting
-  regions; 25% broad spatial controls. Configurable, not statistically optimized.
+- Adaptive generation is private, periodic, and silent, using **20
+  matched pairs per frozen batch** based on a recorded observation snapshot.
+- After both complete the original 100, run a **response-blind geographic
+  coverage audit** of all A and B assignment coordinates against the exact
+  eligible-area polygons (including exclusions). Report nearest-assignment
+  distances, median/90th-percentile distances and estimated area fractions
+  farther than 50/100/150/200 m from any assigned location. Also report
+  per-participant coverage separately and privately locate large gaps.
+  Unknown/unvisited territory is **not** evidence of a quiet feeling.
+- Proposed default transition, for **100 approved additional matched pairs**:
+  - Pairs **101–120**: 10 response-blind, coverage-directed controls +
+    10 response-informed investigations (50:50).
+  - Pairs **121–140**: another 10 + 10, re-auditing geographic holes first.
+  - Pairs **141–200**: 15 response-informed + 5 coverage-directed controls
+    per 20-pair batch (75:25). Thus the full 100-pair extension includes
+    65 response-informed and 35 coverage-directed controls.
+  This is a **proposed default**: it does not silently authorize additional
+  locations, change previously frozen batches, or auto-close the study.
+- "Coverage-directed" is deliberately **not uniformly random**, although
+  it is selected without using anyone's impression data. It preferentially
+  fills the largest geometric gaps, using independent random seeds and candidate
+  pools. Call these response-blind spatial controls, not unqualified random
+  samples; record their selection mode for subsequent inference.
+- Up to **200 ft** between paired locations; use smaller separations for
+  some response-informed investigations when useful.
+- Within the response-informed portion, target potentially interesting local
+  hotspots and peripheries (~47%), uncertain or locally contrasting pairs
+  (~33%), and genuinely observed quiet regions (~20%). The new short-range
+  score prevents one strong response being lost within a broad neighborhood
+  of neutral ratings. A matched A/B contrast can represent geography as well
+  as participant differences: do not call it proof of observer disagreement.
 - A region qualifies for investigation based on **one participant's
   responses**; lack of evidence from the other isn't negative evidence.
 - Preserve pair identity, opposite-observer blinding, and each participant's
@@ -30,6 +54,32 @@ regenerate or renumber the original 100 pairs.**
   More sampling can be *recommended*, never silently added beyond an
   approved final cap.
 - Freeze each generated batch. Never move or overwrite assigned points.
+
+## Two additional pure draft utilities
+
+- `research/coverage-audit.js` exports `auditCoverage()`, a deterministic
+  and **response-blind** diagnostic, and `phasePlan()`, the 50% → 75%
+  proposed default. Both operate on trusted geometry/assignments and make
+  **no database calls or writes**.
+- `research/adaptive-engine.js` now selects broad controls from a separate
+  response-blind candidate pool **before** response-informed proposals, then
+  shuffles the finished pairs. Changing response strengths/valences without
+  changing assignment geography cannot change broad control coordinates.
+  It also uses a short-range strong-response feature and localized matched
+  pair contrasts for targeting.
+- `research/coverage-audit.test.js` checks exclusion zones, deterministic
+  coverage estimates, improvement of synthetic geographic gaps, and phase
+  boundaries. `research/adaptive.test.js` checks independent controls and
+  sensitivity to an isolated strong response. These tests use **synthetic
+  data**, not the live study.
+
+The administrator prototype and draft SQL **do not yet apply this phase
+schedule automatically**. The eventual trusted coordinator must read the
+approved pair limit, count completed/released assignments, freeze each batch's
+sampling settings, and enforce the transition. Initial geographic coverage
+can be audited privately from the assigned coordinates even before 100
+responses, but adaptive promotion must wait until **both** complete 100.
+Re-run coverage analysis between batches without changing previous points.
 
 ## Required activation mechanism — NOT IMPLEMENTED HERE
 
@@ -102,12 +152,18 @@ The canReleaseResults helper is NOT a server authorization mechanism.
 
 From repository root on Node 20+:
 
-    node --test research/adaptive.test.js
+    node --test research/*.test.js
 
 Uses synthetic data, no Supabase calls or personal information.
 
 ## Limitations
 
+- Geographic-coverage fractions are **Monte Carlo estimates**, not proofs
+  that every part of a polygon has been visited; smaller spatial gaps can
+  remain. Use the same seed and sample grid for before/after comparisons.
+- The nonuniform, adaptive/coverage-directed design changes inclusion
+  probabilities. Retain sampling modes, seeds, snapshots and exact selection
+  settings for later analyses.
 - Sampling scores are exploratory information-gathering heuristics, not
   probabilities that any subjective impression is objectively true.
 - Estimated additional sample size is a planning heuristic, not a
