@@ -42,3 +42,26 @@ test('no approved extension, invalid baseline, excessive separation all fail clo
  assert.throws(()=>prepareSharedPreview({...args,
   originalPairs:originals.map((x,i)=>i===0?{...x,B:[-74.15,40.34]}:x)}),/200 ft/);
 });
+
+test('before/after audits use identical geographic samples, and candidate locations remain unchanged',()=>{
+ const result=prepareSharedPreview(args);
+ const {eligible,bounds}=geometryMask(args.polygons);
+ const expected=require('./adaptive-engine.js').generateBatch({
+  bounds,eligible,observations:args.observations,existingPairs:args.originalPairs,
+  count:20,seed:args.seed,batchIndex:1,adaptivePercent:50
+ });
+ assert.deepEqual(result.batch,expected,'Coverage reporting must not change candidate locations');
+ assert.equal(result.coverage.seed,result.coverageAfter.seed);
+ assert.equal(result.coverage.samples,result.coverageAfter.samples);
+ assert.equal(result.coverage.assignedPairs,100);
+ assert.equal(result.coverageAfter.assignedPairs,120);
+ for(const scope of ['combined','participantA','participantB']){
+  const before=result.coverage[scope],after=result.coverageAfter[scope];
+  for(const metric of ['medianMeters','p90Meters'])
+   assert(after[metric]<=before[metric]+1e-8,scope+' '+metric+' must not worsen');
+  for(const radius of [100,200])
+   assert(after.estimatedFractionBeyondMeters[radius]<=
+    before.estimatedFractionBeyondMeters[radius]+1e-12,
+    scope+' >'+radius+'m area must not increase');
+ }
+});
