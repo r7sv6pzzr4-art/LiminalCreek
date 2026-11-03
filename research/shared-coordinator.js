@@ -70,10 +70,11 @@ function prepareSharedPreview({polygons,originalPairs,observations=[],completion
   check(eligible(pair.A)&&eligible(pair.B),'Proposed pair outside polygons');
   check(distance(pair.A,pair.B)<=60.97,'Proposed matched pair exceeds 200 ft');
  }
+ const coverageAfter=auditCoverage({bounds,eligible,existingPairs:[...originalPairs,...batch.pairs.map(p=>({A:p.A,B:p.B}))],seed:seed+'-coverage-audit',sampleCount});
  return {privatePreview:true,productionWrites:false,
    releaseEligible:completion.A===100&&completion.B===100,
    completion:{A:completion.A,B:completion.B},
-   coverage,phase:plan.phase,adaptivePercent:plan.adaptivePercent,
+   coverage,coverageAfter,phase:plan.phase,adaptivePercent:plan.adaptivePercent,
    batch,warning:'PRIVATE LOCAL PREVIEW ONLY. Do not publish coordinates or commit output.'};
 }
 module.exports={geometryMask,prepareSharedPreview};
