@@ -13,6 +13,11 @@ h2{font:17px Georgia,serif;margin:4px 0 9px}h3{font-size:14px}#list{display:grid
 #list button{padding:7px 2px;font-size:12px;background:#214f40}#list button.active{outline:2px solid white}
 #selected{white-space:pre-line;line-height:1.6;min-height:70px}.tick{margin:8px 0;display:block}
 #stats{line-height:1.65}.warn{color:#f7ca8c}#notice{min-height:35px}
+.coverage-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.coverage-table th,.coverage-table td{padding:7px 3px;border-bottom:1px solid #456252;text-align:right}
+.coverage-table th:first-child,.coverage-table td:first-child{text-align:left}
+.coverage-table th{color:#c0d1c6;font-weight:600}
+#coverageNote{font-size:12px;line-height:1.5}
 .legend{display:flex;align-items:center;gap:6px;margin:6px 0}.dot{height:11px;width:11px;border-radius:50%;display:inline-block}
 @media(max-width:760px){#layout{display:flex;flex-direction:column;height:auto}#map{height:58dvh;min-height:360px}aside{height:auto;max-height:none;border-left:0;border-top:1px solid #526b5a}}
 </style></head>
@@ -32,6 +37,19 @@ h2{font:17px Georgia,serif;margin:4px 0 9px}h3{font-size:14px}#list{display:grid
 <div class="legend"><span class="dot" style="background:#f6cb6a"></span> Coverage-directed pair</div>
 <div class="legend"><span class="dot" style="background:#ef8c72"></span> Response-informed pair</div>
 <button id="all">Zoom to full study</button></section>
+<section class="panel"><h2>Before / after geographic coverage</h2>
+<label for="coverageScope">Locations considered</label>
+<select id="coverageScope">
+<option value="combined">Both participants combined</option>
+<option value="participantA">Participant A only</option>
+<option value="participantB">Participant B only</option>
+</select>
+<table class="coverage-table" aria-label="Original versus proposed sampling coverage">
+<thead><tr><th>Metric</th><th>100 pairs</th><th>+20 pairs</th><th>Change</th></tr></thead>
+<tbody id="coverageRows"><tr><td colspan="4">Load a preview with coverage comparison.</td></tr></tbody>
+</table>
+<p class="muted" id="coverageNote">The 20 added pairs are candidates only, not released locations.</p>
+</section>
 <section class="panel"><h2>Proposed pair inspection</h2>
 <div id="list" aria-label="Select pair"></div><p id="selected">Choose a proposed pair to inspect it.</p>
 <button id="next" disabled>Next pair</button>
@@ -76,6 +94,47 @@ function selectedPair(i){
   '\nStatus: candidate only';
  [...$('list').children].forEach((b,j)=>b.classList.toggle('active',j===selected));
 }
+function renderCoverage(){
+ const rows=$('coverageRows');rows.replaceChildren();
+ const before=prev?.coverage,after=prev?.coverageAfter;
+ if(!before||!after){
+  const r=document.createElement('tr'),cell=document.createElement('td');
+  cell.colSpan=4;
+  cell.textContent='Regenerate the private preview using the updated coordinator to see before/after metrics.';
+  r.append(cell);rows.append(r);
+  $('coverageNote').textContent='The existing preview still works for mapping; its proposed locations are unchanged.';
+  return;
+ }
+ if(before.seed!==after.seed||before.samples!==after.samples||
+    before.assignedPairs!==100||after.assignedPairs!==120)
+  throw Error('Coverage comparison must use the same geographic sample and 100 versus 120 pairs');
+ const scope=$('coverageScope').value;
+ const a=before[scope],b=after[scope];
+ if(!a||!b)throw Error('Missing coverage statistics for '+scope);
+ const metrics=[
+  ['Median distance','m',x=>x.medianMeters],
+  ['90th percentile','m',x=>x.p90Meters],
+  ['Area >100 m','percent',x=>x.estimatedFractionBeyondMeters[100]],
+  ['Area >200 m','percent',x=>x.estimatedFractionBeyondMeters[200]]
+ ];
+ const fmt=(v,type)=>type==='m'?v.toFixed(1)+' m':(100*v).toFixed(1)+'%';
+ const delta=(a,b,type)=>{
+  const d=type==='m'?b-a:100*(b-a);
+  const unit=type==='m'?' m':' pp';
+  return (Math.abs(d)<0.05?'0.0':(d>0?'+':'')+d.toFixed(1))+unit;
+ };
+ for(const [label,type,read] of metrics){
+  const x=read(a),y=read(b);
+  if(!Number.isFinite(x)||!Number.isFinite(y))throw Error('Invalid coverage metric');
+  const row=document.createElement('tr');
+  for(const value of [label,fmt(x,type),fmt(y,type),delta(x,y,type)]){
+   const cell=document.createElement('td');cell.textContent=value;row.append(cell);
+  }
+  rows.append(row);
+ }
+ $('coverageNote').textContent='Both columns use the same '+before.samples+
+  ' seeded sample points within the eligible study area. Changes below zero indicate improved coverage. Percent changes are percentage points (pp). The +20 pairs are not released.';
+}
 function render(){
  if(!snap||!prev)return;
  try{
@@ -116,6 +175,7 @@ function render(){
     '\nMedian nearest-site distance: '+Math.round(n.combined.medianMeters)+' m'+
     '\n90th percentile nearest-site distance: '+Math.round(n.combined.p90Meters)+' m';
   $('stats').style.whiteSpace='pre-line';$('next').disabled=false;
+  renderCoverage();
   fit();selectedPair(0);notice('Loaded locally. No assignments have been changed.');
  }catch(e){notice('Unable to review: '+e.message);}
 }
@@ -130,5 +190,6 @@ for(const [key,fn] of [['snapshot',parseCsv],['preview',JSON.parse]]){
 for(const [id,layer] of [['originals',originals],['gaps',gaps],['candidate',candidate]])
  $(id).onchange=()=>{$(id).checked?layer.addTo(map):map.removeLayer(layer);};
 $('all').onclick=fit;$('next').onclick=()=>selectedPair(selected+1);
+$('coverageScope').onchange=()=>{if(snap&&prev){try{renderCoverage()}catch(e){notice(e.message)}}};
 })();
 </script></body></html>
