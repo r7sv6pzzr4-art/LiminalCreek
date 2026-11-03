@@ -8,6 +8,8 @@ on:
       - 'research/freeze-stage.js'
       - 'research/append-only-promotion.js'
       - 'research/shared-study.test.js'
+      - 'research/shared-coordinator.js'
+      - 'research/shared-coordinator.test.js'
       - '.github/workflows/shared-adaptive-tests.yml'
   workflow_dispatch:
 jobs:
@@ -20,4 +22,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test research/shared-study.test.js research/coverage-audit.test.js research/freeze-stage.test.js research/promotion.test.js
+      - run: node --test research/shared-study.test.js research/shared-coordinator.test.js research/coverage-audit.test.js research/freeze-stage.test.js research/promotion.test.js
