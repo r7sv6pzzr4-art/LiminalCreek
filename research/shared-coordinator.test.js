@@ -40,7 +40,7 @@ test('no approved extension, invalid baseline, excessive separation all fail clo
  assert.throws(()=>prepareSharedPreview({...args,approvedAdditionalPairs:0}),/authorized/);
  assert.throws(()=>prepareSharedPreview({...args,originalPairs:originals.slice(1)}),/100 original/);
  assert.throws(()=>prepareSharedPreview({...args,
-  originalPairs:originals.map((x,i)=>i===0?{...x,B:[-74.15,40.34]}:x)}),/200 ft/);
+  originalPairs:originals.map((x,i)=>i===0?{...x,B:[-74.177,40.311]}:x)}),/200 ft/);
 });
 
 test('before/after audits use identical geographic samples, and candidate locations remain unchanged',()=>{
