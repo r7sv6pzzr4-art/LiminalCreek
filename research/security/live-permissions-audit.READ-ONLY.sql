@@ -37,8 +37,7 @@ SELECT p.proname AS function_name,
           FROM unnest(coalesce(p.proconfig,ARRAY[]::text[])) x
           WHERE x LIKE 'search_path=%') AS search_path_setting,
        has_function_privilege('anon',p.oid,'EXECUTE') AS anon_execute,
-       has_function_privilege('authenticated',p.oid,'EXECUTE') AS member_execute,
-       has_function_privilege('PUBLIC',p.oid,'EXECUTE') AS public_execute
+       has_function_privilege('authenticated',p.oid,'EXECUTE') AS member_execute
 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
 WHERE n.nspname='public'
 ORDER BY p.proname,pg_get_function_identity_arguments(p.oid);
