@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek · Private shared-site review</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#142b27;color:#e5eee9;font:14px system-ui,sans-serif}
+header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font:23px Georgia,serif;margin:0}small,.muted{color:#b5c8be}#layout{display:grid;grid-template-columns:minmax(300px,1fr) 310px;height:calc(100dvh - 77px)}
+#map{height:100%;background:#24372f}aside{padding:14px;overflow:auto;border-left:1px solid #526b5a}label{display:block;margin:12px 0 4px}
+input[type=file],select,button{max-width:100%;font:inherit}input[type=file]{font-size:12px}button,select{background:#2c5648;border:1px solid #86a996;color:white;padding:7px 10px;border-radius:7px}
+button:disabled{opacity:.4}.panel{border:1px solid #506e5d;border-radius:9px;padding:11px;margin:12px 0;background:#1e3b30}
+h2{font:17px Georgia,serif;margin:4px 0 9px}h3{font-size:14px}#list{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+#list button{padding:7px 2px;font-size:12px;background:#214f40}#list button.active{outline:2px solid white}
+#selected{white-space:pre-line;line-height:1.6;min-height:70px}.tick{margin:8px 0;display:block}
+#stats{line-height:1.65}.warn{color:#f7ca8c}#notice{min-height:35px}
+.legend{display:flex;align-items:center;gap:6px;margin:6px 0}.dot{height:11px;width:11px;border-radius:50%;display:inline-block}
+@media(max-width:760px){#layout{display:flex;flex-direction:column;height:auto}#map{height:58dvh;min-height:360px}aside{height:auto;max-height:none;border-left:0;border-top:1px solid #526b5a}}
+</style></head>
+<body><header><div><h1>LiminalCreek · Adaptive location review</h1><small>Private, read-only local review · NOT the participant application</small></div><strong class="warn">NOT APPROVED / NOT RELEASED</strong></header>
+<div id="layout"><div id="map"></div><aside>
+<section class="panel"><h2>Load private files</h2>
+<label>1. Supabase snapshot CSV</label><input type="file" id="snapshot" accept=".csv,.json,text/csv,application/json">
+<label>2. Generated preview JSON</label><input type="file" id="preview" accept=".json,application/json">
+<p class="muted">Files are read only by this browser page, not uploaded. Online map imagery requests reveal the viewed map area to the imagery provider. No response text is shown.</p>
+<div id="notice" aria-live="polite"></div></section>
+<section class="panel"><h2>Sampling coverage</h2><div id="stats">Load both files to see the study summary.</div>
+<label class="tick"><input type="checkbox" id="originals" checked> Original locations (both participants)</label>
+<label class="tick"><input type="checkbox" id="gaps" checked> Largest geographical coverage gaps</label>
+<label class="tick"><input type="checkbox" id="candidate" checked> Proposed adaptive pairs</label>
+<div class="legend"><span class="dot" style="background:#79b8d0"></span> Original assignments</div>
+<div class="legend"><span class="dot" style="background:#c9a1da"></span> Unsampled gap center</div>
+<div class="legend"><span class="dot" style="background:#f6cb6a"></span> Coverage-directed pair</div>
+<div class="legend"><span class="dot" style="background:#ef8c72"></span> Response-informed pair</div>
+<button id="all">Zoom to full study</button></section>
+<section class="panel"><h2>Proposed pair inspection</h2>
+<div id="list" aria-label="Select pair"></div><p id="selected">Choose a proposed pair to inspect it.</p>
+<button id="next" disabled>Next pair</button>
+<p class="muted">Markers A and B indicate the two proposed endpoints, not which participant will receive each in their presentation order.</p></section>
+<section class="panel"><h2>Review status</h2>
+<p>Use this to check spatial balance and candidate placement. There is deliberately no approve, stage, or release button.</p>
+<p class="warn">No changes to Supabase are possible from this page.</p></section>
+</aside></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),notice=message=>$('notice').textContent=message;
+const map=L.map('map').setView([40.35,-74.11],12);
+const aerial=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2007',{layers:'Natural2007',format:'image/jpeg',version:'1.1.1',maxZoom:20,attribution:'NJGIN 2007'});
+const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',version:'1.1.1',maxZoom:20,attribution:'NJGIN 2020'});
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+L.control.layers({'2007 aerial':aerial,'2020 aerial':aerial2020,'Street map':osm}).addTo(map);
+const base=L.geoJSON(null,{style:{color:'#a4c9ae',weight:2,fillColor:'#82a990',fillOpacity:.06}}).addTo(map);
+const originals=L.layerGroup().addTo(map),gaps=L.layerGroup().addTo(map),candidate=L.layerGroup().addTo(map);
+let snap=null,prev=null,selected=-1,features=[];
+function parseCsv(raw){
+ let s=raw.replace(/^\uFEFF/,'').trim().replace(/^"?snapshot_json"?\r?\n/i,'').trim();
+ if(s.startsWith('"{')&&s.endsWith('"'))s=s.slice(1,-1).replace(/""/g,'"');
+ let obj=JSON.parse(s);
+ if(Array.isArray(obj)&&obj.length===1)obj=obj[0];
+ if(obj&&obj.snapshot_json)obj=typeof obj.snapshot_json==='string'?JSON.parse(obj.snapshot_json):obj.snapshot_json;
+ return obj;
+}
+const latlng=p=>[p[1],p[0]],dist=(a,b)=>{
+ const rad=Math.PI/180,dlat=(b[1]-a[1])*rad,dlon=(b[0]-a[0])*rad;
+ const q=Math.sin(dlat/2)**2+Math.cos(a[1]*rad)*Math.cos(b[1]*rad)*Math.sin(dlon/2)**2;
+ return 6371008.8*2*Math.asin(Math.min(1,Math.sqrt(q)));
+};
+function fit(){const b=base.getBounds();if(b.isValid())map.fitBounds(b.pad(.06));}
+function selectedPair(i){
+ if(!features.length)return;selected=(i+features.length)%features.length;
+ const pair=features[selected],m=pair.pair,where=L.latLngBounds([latlng(pair.A),latlng(pair.B)]);
+ map.fitBounds(where.pad(3),{maxZoom:18});
+ $('selected').textContent='Pair '+(selected+1)+' of '+features.length+'\nMode: '+pair.mode+
+  '\nEndpoint distance: '+dist(pair.A,pair.B).toFixed(1)+' m ('+(dist(pair.A,pair.B)*3.28084).toFixed(0)+' ft)'+
+  '\nIntended max: '+Number(pair.maximumSeparationMeters||60.96).toFixed(1)+' m'+
+  '\nStatus: candidate only';
+ [...$('list').children].forEach((b,j)=>b.classList.toggle('active',j===selected));
+}
+function render(){
+ if(!snap||!prev)return;
+ try{
+  if(snap.schemaVersion!==1||snap.originalPairs?.length!==100||prev.batch?.pairs?.length!==20)
+   throw Error('Unexpected snapshot or preview structure');
+  if(snap.studyId!==prev.studyId && prev.studyId!==undefined)throw Error('Study ID mismatch');
+  const n=prev.coverage;
+  if(n?.assignedPairs!==100)throw Error('Coverage report does not match original 100');
+  if(prev.sourceDigest&&prev.sourceDigest!==undefined)notice('Loaded. Review the candidate pairs and coverage gaps.');
+  base.clearLayers();originals.clearLayers();gaps.clearLayers();candidate.clearLayers();features=[];
+  base.addData(snap.polygons);
+  for(const p of snap.originalPairs)for(const side of ['A','B'])
+   L.circleMarker(latlng(p[side]),{radius:3,color:'#40687e',weight:1,fillColor:'#79b8d0',fillOpacity:.7})
+    .bindTooltip('Original '+side+' assignment').addTo(originals);
+  for(const p of n.largestCoverageGaps||[]){
+   const marker=L.circleMarker(latlng(p.point),{radius:7,color:'#a475b8',weight:2,fillColor:'#c9a1da',fillOpacity:.55});
+   marker.bindTooltip('Coverage gap: '+Math.round(p.nearestCombinedMeters)+' m to nearest assigned site').addTo(gaps);
+  }
+  const list=$('list');list.replaceChildren();
+  prev.batch.pairs.forEach((p,i)=>{
+   const col=p.mode==='broad'?'#f6cb6a':'#ef8c72';
+   const line=L.polyline([latlng(p.A),latlng(p.B)],{color:col,weight:3,opacity:.9}).addTo(candidate);
+   for(const [side,pos] of [['A',p.A],['B',p.B]])
+    L.circleMarker(latlng(pos),{radius:6,color:'#192c26',weight:2,fillColor:col,fillOpacity:.95})
+     .bindTooltip('Candidate '+(i+1)+' endpoint '+side+' — '+p.mode).addTo(candidate)
+     .on('click',()=>selectedPair(i));
+   line.on('click',()=>selectedPair(i));
+   const button=document.createElement('button');button.type='button';button.textContent=String(i+1);
+   button.title='Inspect candidate '+(i+1)+' ('+p.mode+')';button.onclick=()=>selectedPair(i);list.append(button);
+   features.push(p);
+  });
+  const counts=prev.batch.pairs.reduce((r,p)=>(r[p.mode]=(r[p.mode]||0)+1,r),{});
+  $('stats').textContent='Original pairs: 100\nResponses: '+prev.observedResponses+
+    '\nCompletion A / B: '+prev.completion.A+' / '+prev.completion.B+
+    '\nProposed pairs: '+prev.batch.count+
+    '\nCoverage-directed: '+(counts.broad||0)+
+    '\nResponse-informed: '+(prev.batch.count-(counts.broad||0))+
+    '\nMedian nearest-site distance: '+Math.round(n.combined.medianMeters)+' m'+
+    '\n90th percentile nearest-site distance: '+Math.round(n.combined.p90Meters)+' m';
+  $('stats').style.whiteSpace='pre-line';$('next').disabled=false;
+  fit();selectedPair(0);notice('Loaded locally. No assignments have been changed.');
+ }catch(e){notice('Unable to review: '+e.message);}
+}
+for(const [key,fn] of [['snapshot',parseCsv],['preview',JSON.parse]]){
+ $(key).addEventListener('change',async e=>{
+  try{const f=e.target.files?.[0];if(!f)return;
+   const parsed=fn(await f.text());if(key==='snapshot')snap=parsed;else prev=parsed;
+   notice('Loaded '+key+' file.');render();
+  }catch(err){notice('Error loading '+key+': '+err.message);}
+ });
+}
+for(const [id,layer] of [['originals',originals],['gaps',gaps],['candidate',candidate]])
+ $(id).onchange=()=>{$(id).checked?layer.addTo(map):map.removeLayer(layer);};
+$('all').onclick=fit;$('next').onclick=()=>selectedPair(selected+1);
+})();
+</script></body></html>
