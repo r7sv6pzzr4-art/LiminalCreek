@@ -73,10 +73,12 @@ END $$;
 REVOKE ALL ON FUNCTION public.liminal_admin_auto_status() FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.liminal_admin_auto_status() TO authenticated;
 
--- Private Edge Function invokes this RPC *with the administrator's JWT*.
+-- Only the trusted Edge Function (service_role) may call this RPC with coordinates.
+-- The Edge Function authenticates a real user JWT and supplies the verified actor UUID.
+-- The user's browser cannot call this function, even if signed in as administrator.
 -- Every insert + the immutable batch record occur in ONE DB transaction.
--- The client cannot send candidate coordinates, only a 20/40 count.
 CREATE OR REPLACE FUNCTION public.liminal_admin_commit_auto_batch(
+  p_actor_user_id uuid,
   p_request_id uuid,
   p_expected_assignment_rows integer,
   p_expected_response_rows integer,
@@ -92,13 +94,15 @@ DECLARE sid uuid; members uuid[]; rows_current bigint; responses_current bigint;
         v_orderb integer; v_percent integer; v_dist double precision;
         v_row jsonb;
 BEGIN
- IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Sign-in required'; END IF;
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN
+  RAISE EXCEPTION 'Trusted server coordinator required'; END IF;
+ IF p_actor_user_id IS NULL THEN RAISE EXCEPTION 'Verified administrator ID required'; END IF;
  IF p_request_id IS NULL OR p_seed IS NULL OR length(p_seed)<12 THEN
   RAISE EXCEPTION 'Invalid activation request';
  END IF;
  SELECT p.study_id INTO sid FROM public.participants p
  JOIN public.studies s ON s.id=p.study_id
- WHERE p.user_id=auth.uid() AND p.is_admin
+ WHERE p.user_id=p_actor_user_id AND p.is_admin
    AND s.started_at IS NOT NULL AND s.revealed_at IS NULL
  ORDER BY s.created_at LIMIT 1;
  IF sid IS NULL THEN RAISE EXCEPTION 'Administrator required'; END IF;
@@ -194,7 +198,7 @@ BEGIN
  RETURN jsonb_build_object('batchId',v_batch_id,'addedPairs',pair_count,
    'firstSequence',start_seq,'alreadyCommitted',false);
 END $$;
-REVOKE ALL ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,integer,integer,text,jsonb) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,integer,integer,text,jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb) TO service_role;
 
 -- Always run permission audits again after any eventual deployment.
