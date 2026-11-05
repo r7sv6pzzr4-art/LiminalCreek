@@ -44,3 +44,16 @@ test('activation after first 40 uses 75% adaptive',()=>{
   existingPairs:originals,batchIndex:3,seed:'later-phase-test',adaptivePercent:75});
  assert.equal(batch.pairs.filter(p=>p.mode==='broad').length,5);
 });
+
+test('10 and 30 pair selections honor 50% or 75% adaptive presets',()=>{
+ for(const count of [10,30]){
+  for(const adaptivePercent of [50,75]){
+   const batch=serverGenerate({count,bounds,eligible,observations:obs,
+    existingPairs:originals,batchIndex:1,seed:'chosen-'+count+'-'+adaptivePercent,
+    adaptivePercent});
+   assert.equal(batch.pairs.length,count);
+   const broad=batch.pairs.filter(p=>p.mode==='broad').length;
+   assert(Math.abs(broad-count*(100-adaptivePercent)/100)<=1);
+  }
+ }
+});
