@@ -1,0 +1,79 @@
+name: Disposable Supabase staging integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [shared-adaptive-integration-20261102]
+    paths:
+      - 'research/staging/integration.cjs'
+      - 'supabase/config.toml'
+      - 'supabase/functions/liminal-auto-activate/index.ts'
+      - 'supabase/functions/_shared/adaptive-engine.mjs'
+      - 'research/drafts/auto-activation.DO-NOT-RUN.sql'
+      - '.github/workflows/disposable-supabase-staging.yml'
+
+jobs:
+  offline-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Assemble disposable local-only migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f supabase/config.toml
+          test ! -f supabase/.branches/_current_branch
+          mkdir -p supabase/migrations
+          {
+            cat backend/schema.sql
+            echo
+            cat backend/02_live_study_api.sql
+            echo
+            cat research/drafts/auto-activation.DO-NOT-RUN.sql
+          } > supabase/migrations/20261104000000_local_only.sql
+      - name: Start actual Supabase Auth, database, PostgREST and Edge runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase start --exclude realtime,storage-api,imgproxy,mailpit,studio,postgres-meta,logflare,vector,supavisor
+      - name: Prepare temporary LOCAL credentials (never print)
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase status -o env > "$RUNNER_TEMP/liminal-staging.env"
+          chmod 600 "$RUNNER_TEMP/liminal-staging.env"
+          source "$RUNNER_TEMP/liminal-staging.env"
+          test -n "${API_URL:-}" && test -n "${ANON_KEY:-}" && test -n "${SERVICE_ROLE_KEY:-}"
+          [[ "$API_URL" == http://127.0.0.1:54321* || "$API_URL" == http://localhost:54321* ]]
+          {
+            echo "STAGING_SUPABASE_URL=$API_URL"
+            echo "STAGING_ANON_KEY=$ANON_KEY"
+            echo "STAGING_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+      - name: Start Edge Function (local only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup supabase functions serve liminal-auto-activate > "$RUNNER_TEMP/liminal-edge.log" 2>&1 < /dev/null &
+          echo $! > "$RUNNER_TEMP/liminal-edge.pid"
+      - name: Install test-only Supabase client
+        run: npm --prefix research/staging install --no-save --no-package-lock --silent @supabase/supabase-js@2
+      - name: Test synthetic Auth, RLS, 20 + 30 adaptive appends and uninterrupted queues
+        run: node research/staging/integration.cjs
+      - name: Show sanitized error information if tests fail
+        if: failure()
+        run: |
+          if [ -f "$RUNNER_TEMP/liminal-edge.log" ]; then
+            sed -E 's/(eyJ[a-zA-Z0-9_-]{20,})/[REDACTED_JWT]/g' "$RUNNER_TEMP/liminal-edge.log" | tail -45
+          fi
+      - name: Stop disposable services
+        if: always()
+        run: supabase stop --no-backup || true
