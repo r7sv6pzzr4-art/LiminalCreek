@@ -2,9 +2,12 @@
 \set ON_ERROR_STOP on
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE anon NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA auth;
-CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
- SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $
+ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $
+ SELECT nullif(current_setting('request.jwt.claim.role',true),'')::text $;
 GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 CREATE TABLE public.studies (
@@ -56,6 +59,7 @@ CREATE TEMP TABLE original_hash AS SELECT
 
 -- Authenticated member without administrator role must not receive status.
 SET ROLE authenticated;
+SET request.jwt.claim.role = 'authenticated';
 SET request.jwt.claim.sub = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 DO $$
 BEGIN
@@ -67,14 +71,24 @@ BEGIN
  END;
 END $$;
 
--- Admin obtains status, then calls atomic release with 20 synthetic matched pairs.
+-- Admin may read status but cannot submit arbitrary coordinates directly.
 SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-DO $$
-DECLARE stat jsonb; manifest jsonb; outcome jsonb;
+DO $
+DECLARE stat jsonb;
 BEGIN
  stat:=public.liminal_admin_auto_status();
  IF (stat->>'canActivate')::boolean IS DISTINCT FROM true
  THEN RAISE EXCEPTION 'Expected eligible full-original study'; END IF;
+ IF has_function_privilege('authenticated','public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb)','EXECUTE')
+ THEN RAISE EXCEPTION 'Client may execute coordinate insertion RPC'; END IF;
+END $;
+RESET ROLE;
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+-- Only trusted coordinator may commit a generated manifest.
+DO $
+DECLARE manifest jsonb; outcome jsonb;
+BEGIN
  SELECT jsonb_agg(jsonb_build_object(
    'pairId',gen_random_uuid(),'mode',CASE WHEN n<=10 THEN 'broad' ELSE 'interesting' END,
    'longitudeA',-74.17+n*0.00008,'latitudeA',40.32,
@@ -82,6 +96,7 @@ BEGIN
    'orderA',n,'orderB',21-n,'adaptivePercent',50
  ) ORDER BY n) INTO manifest FROM generate_series(1,20) n;
  outcome:=public.liminal_admin_commit_auto_batch(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,200,
   'synthetic-fixed-long-seed',manifest);
  IF (outcome->>'addedPairs')::integer<>20 OR (outcome->>'firstSequence')::integer<>101
@@ -89,6 +104,7 @@ BEGIN
  -- A double-click with a different ID may not append while queues are unfinished.
  BEGIN
   PERFORM public.liminal_admin_commit_auto_batch(
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',240,200,
    'synthetic-fixed-long-seed',manifest);
   RAISE EXCEPTION 'TEST_FAILURE_DOUBLE_RELEASE_ALLOWED';
@@ -97,6 +113,7 @@ BEGIN
  END;
  -- Same request ID is idempotent even after the queue changes.
  outcome:=public.liminal_admin_commit_auto_batch(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,200,
   'synthetic-fixed-long-seed',manifest);
  IF (outcome->>'alreadyCommitted')::boolean IS DISTINCT FROM true THEN
@@ -128,9 +145,9 @@ END $$;
 INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
  SELECT a.id,a.study_id,a.user_id,'neutral',NULL
  FROM public.assignments a WHERE a.sequence_no BETWEEN 101 AND 120;
-SET ROLE authenticated;
-SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-DO $$
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+DO $
 DECLARE manifest jsonb; result jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
@@ -141,6 +158,7 @@ BEGIN
   'adaptivePercent',CASE WHEN n<=20 THEN 50 ELSE 75 END
  ) ORDER BY n) INTO manifest FROM generate_series(1,40) n;
  result:=public.liminal_admin_commit_auto_batch(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',240,240,
   'synthetic-second-long-seed',manifest);
  IF (result->>'addedPairs')::integer<>40 OR (result->>'firstSequence')::integer<>121
