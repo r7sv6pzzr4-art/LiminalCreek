@@ -1,0 +1,21 @@
+name: Adaptive activation Edge Function type check
+on:
+  push:
+    branches: [shared-adaptive-integration-20261102]
+    paths:
+      - 'supabase/functions/liminal-auto-activate/index.ts'
+      - 'supabase/functions/_shared/adaptive-engine.mjs'
+      - '.github/workflows/auto-edge-typecheck.yml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type check server-only adaptive activation (no environment secrets)
+        run: deno check --no-config supabase/functions/liminal-auto-activate/index.ts
