@@ -101,7 +101,7 @@ BEGIN
  outcome:=public.liminal_admin_commit_auto_batch(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,188,
-  'synthetic-fixed-long-seed',50,manifest);
+  'synthetic-fixed-long-seed',50::smallint,manifest);
  IF (outcome->>'addedPairs')::integer<>20 OR (outcome->>'firstSequence')::integer<>101
  THEN RAISE EXCEPTION 'Unexpected release outcome'; END IF;
  -- A double-click with a different ID may not append while queues are unfinished.
@@ -109,7 +109,7 @@ BEGIN
   PERFORM public.liminal_admin_commit_auto_batch(
    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',240,188,
-   'synthetic-fixed-long-seed',50,manifest);
+   'synthetic-fixed-long-seed',50::smallint,manifest);
   RAISE EXCEPTION 'TEST_FAILURE_DOUBLE_RELEASE_ALLOWED';
  EXCEPTION WHEN OTHERS THEN
   IF SQLERRM='TEST_FAILURE_DOUBLE_RELEASE_ALLOWED' THEN RAISE; END IF;
@@ -118,7 +118,7 @@ BEGIN
  outcome:=public.liminal_admin_commit_auto_batch(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,188,
-  'synthetic-fixed-long-seed',50,manifest);
+  'synthetic-fixed-long-seed',50::smallint,manifest);
  IF (outcome->>'alreadyCommitted')::boolean IS DISTINCT FROM true THEN
   RAISE EXCEPTION 'Activation retry was not idempotent';
  END IF;
@@ -174,7 +174,7 @@ BEGIN
  result:=public.liminal_admin_commit_auto_batch(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',240,235,
-  'synthetic-second-long-seed',75,manifest);
+  'synthetic-second-long-seed',75::smallint,manifest);
  IF (result->>'addedPairs')::integer<>40 OR (result->>'firstSequence')::integer<>121
  THEN RAISE EXCEPTION '40-pair activation failed'; END IF;
 END $$;
