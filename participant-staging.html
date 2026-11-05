@@ -62,8 +62,8 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 #authPanel input{flex:1;min-width:180px;background:#10251e;border:1px solid #708f81;color:#fff;border-radius:8px;padding:10px}
 #authPanel p{margin:6px 0;font-size:.86rem;color:#b8c6be}
 header .header-account{display:flex;flex-direction:column;align-items:flex-end;gap:3px}#accountButton{font-size:.78rem;padding:2px 0;background:none;border:0;color:#b7c8b9;text-decoration:underline;text-underline-offset:3px}#authPanel{display:none}#authPanel[open]{display:block;position:fixed;top:90px;left:10px;right:10px;max-width:850px;max-height:70dvh;overflow:auto;z-index:1600;box-shadow:0 8px 32px #0009}#authPanel>summary{display:none}@media(min-width:870px){#authPanel[open]{left:calc(50% - 425px);right:auto;width:850px}}
-</style></head><body><div role='status' style='background:#703a20;color:#fff;padding:10px 16px;text-align:center;font-weight:700'>STAGING PARTICIPANT PREVIEW · SYNTHETIC STUDY ONLY · mrelwvpixalfycfdarjf</div>
-<header><div><h1>LiminalCreek · STAGING</h1><small>SYNTHETIC TEST DATA — NOT THE LIVE STUDY</small></div><div class="header-account"><span id="identity" class="small"></span><a id="adminToolsLink" href="./admin-adaptive.html" hidden style="color:#d3e7d3;font-size:.85rem">Admin</a><button type="button" id="accountButton" aria-controls="authPanel" aria-expanded="false">Account</button></div></header>
+</style></head><body><div role='status' style='background:#703a20;color:#fff;padding:10px 16px;text-align:center;font-weight:700'>STAGING PARTICIPANT PREVIEW · SYNTHETIC STUDY ONLY · mrelwvpixalfycfdarjf · ARTIFICIAL RECTANGULAR STUDY AREA</div>
+<header><div><h1>LiminalCreek · STAGING</h1><small>SYNTHETIC TEST DATA — ARTIFICIAL STUDY BOUNDARY, NOT THE LIVE STUDY</small></div><div class="header-account"><span id="identity" class="small"></span><a id="adminToolsLink" href="./admin-adaptive.html" hidden style="color:#d3e7d3;font-size:.85rem">Admin</a><button type="button" id="accountButton" aria-controls="authPanel" aria-expanded="false">Account</button></div></header>
 <details id="authPanel"><summary>Account · <span id="authIdentity">Not signed in</span></summary><p class="small">STAGING ONLY: Use one of the two synthetic test accounts. Do not enter your real study credentials.</p><label for="stagingKey">Staging publishable API key (sb_publishable_…)</label><input id="stagingKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…" aria-label="Staging publishable key"><label for="stagingPassword">Synthetic staging account password</label><input id="stagingPassword" type="password" autocomplete="current-password" placeholder="Test password"><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Sign in to staging</button><button type="button" id="authSignOut" hidden>Sign out</button></div><div class="auth-row" id="authLinkRow" hidden><input id="authPasteLink" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the sign-in link from your email" aria-label="Paste sign-in email link"><button type="button" id="authUseLink">Sign in with pasted link</button></div><p id="authLinkHelp" hidden>For the Home Screen app: request an email, then <strong>copy</strong> its sign-in link (do not open it). Return here, paste it, and tap Sign in. The link can be used only once.</p><p id="authStatus" aria-live="polite">Connecting…</p></details>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
@@ -212,7 +212,7 @@ function randomEligible(b){for(let i=0;i<20000;i++){const x=b[0]+Math.random()*(
 function offset(point,metres){const ang=Math.random()*Math.PI*2,d=metres*Math.sqrt(Math.random()),lat=point[1]+(d*Math.sin(ang))/111320,lng=point[0]+d*Math.cos(ang)/(111320*Math.cos(point[1]*Math.PI/180));return [lng,lat]}
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
 const prototypeAccess=false;
-let liveMode=!prototypeAccess,livePlace=null,liveStats=null,liveBusy=false;
+let liveMode=!prototypeAccess,livePlace=null,liveStats=null,liveProgress=null,liveBusy=false;
 function usedToday(person){return state.responses.filter(r=>r.person===person&&r.date===today()).length}
 function loc(){return liveMode?(livePlace?{id:livePlace.assignment_id,A:[livePlace.longitude,livePlace.latitude],B:[livePlace.longitude,livePlace.latitude]}:null):state.pairs[state.queues[state.person]?.[state.cursor[state.person]]]}
 // Start close in, allowing participants to zoom out voluntarily for context.
@@ -262,7 +262,17 @@ function refresh(){
  if(liveMode){
   info('liveBanner',liveStats?.started?'Observations are private and remain hidden until the study is complete.':'The study is not yet available.');
   info('placeStatus',!liveStats?'Sign in to load the study, then refresh assignments.':!liveStats.started?'The study has not started yet.':n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 recorded today.':'No more assigned places.');
-  info('stats',(liveStats?.completed||0)+' shared-study impressions recorded. '+n+' of 10 today. Contents remain hidden.');
+  const finished=Number(liveProgress?.completed ?? liveStats?.completed ?? 0);
+  const assigned=Number(liveProgress?.assigned);
+  const total=Number.isFinite(assigned)&&assigned>0
+    ?finished+' of '+assigned+' assigned locations completed. '
+    :finished+' shared-study impressions recorded. ';
+  const batch=liveProgress?.currentSetSize
+    ?'Current set: '+liveProgress.currentSetCompleted+' of '+liveProgress.currentSetSize+
+     ' (locations '+liveProgress.currentSetStart+'–'+
+     (liveProgress.currentSetStart+liveProgress.currentSetSize-1)+'). '
+    :'';
+  info('stats',total+batch+n+' of 10 today. Contents remain hidden.');
  }else{
   info('placeStatus',n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 impressions recorded today.':'No pending locations. Draw eligible areas and generate the study in Setup.');
   info('stats',state.responses.filter(r=>r.person===state.person).length+' impressions recorded on this device. '+n+' of 10 today. No results displayed.');
@@ -272,7 +282,7 @@ function refresh(){
 }
 async function loadLive(){
  if(!liveMode)return;
- placePresented=false;livePlace=null;liveStats=null;resetForm();refresh();
+ placePresented=false;livePlace=null;liveStats=null;liveProgress=null;resetForm();refresh();
  if(!window.liminalClient){info('feedback','Authentication has not loaded; refresh the page.');return}
  liveBusy=true;refresh();
  try{
@@ -281,6 +291,11 @@ async function loadLive(){
   const {data,error}=await window.liminalClient.rpc('next_liminal_place');
   if(error)throw error;
   liveStats=(data||[])[0]||null;
+  // Signed-in, own-progress RPC. It reveals neither another participant's
+  // progress nor any private study responses. Until the additive migration
+  // is installed, preserve the existing completed-only display.
+  const own=await window.liminalClient.rpc('liminal_my_progress');
+  if(!own.error&&own.data)liveProgress=own.data;
   if(liveStats?.started&&liveStats.assignment_id)livePlace=liveStats;
   info('feedback',liveStats?.started?'':'The study has not started yet.');
  }catch(e){info('feedback','Could not load shared study: '+e.message)}
