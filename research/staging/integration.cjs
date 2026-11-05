@@ -77,6 +77,20 @@ async function run(){
  const guestClient=createClient(url,anonKey,options);
  ok(await adminClient.auth.signInWithPassword({email:base+'-a@example.invalid',password:pass}), 'admin sign in');
  ok(await guestClient.auth.signInWithPassword({email:base+'-b@example.invalid',password:pass}), 'guest sign in');
+ const anonymousOwn=await anon.rpc('liminal_my_progress');
+ assert(anonymousOwn.error,'Anonymous caller must not access progress');
+ const ownInitial=ok(await adminClient.rpc('liminal_my_progress'),'admin own progress');
+ const peerInitial=ok(await guestClient.rpc('liminal_my_progress'),'participant own progress');
+ assert.equal(ownInitial.assigned,100);
+ assert.equal(ownInitial.completed,88);
+ assert.equal(ownInitial.currentSetSize,100);
+ assert.equal(ownInitial.currentSetCompleted,88);
+ assert.equal(ownInitial.nextSequence,89);
+ assert.equal(peerInitial.assigned,100);
+ assert.equal(peerInitial.completed,100);
+ assert.equal(peerInitial.nextSequence,101);
+ assert(!JSON.stringify(ownInitial).includes('participant_id'),
+    'Progress should contain no partner identifiers');
  const guestStatus=await guestClient.rpc('liminal_admin_auto_status');
  assert(guestStatus.error,'Nonadmin should be denied status');
  await checkFunction(guestClient,{action:'activate',count:20,adaptivePercent:50,requestId:uid()},true);
@@ -107,6 +121,11 @@ async function run(){
  const key=(r)=>r.user_id;
  assert.equal(appended.filter(r=>key(r)===a.id).length,20);
  assert.equal(appended.filter(r=>key(r)===b.id).length,20);
+ const afterBatch=ok(await adminClient.rpc('liminal_my_progress'),'first added set status');
+ assert.equal(afterBatch.assigned,120);
+ assert.equal(afterBatch.completed,88);
+ assert.equal(afterBatch.currentSetStart,1);
+ assert.equal(afterBatch.nextSequence,89);
  console.log('STAGING: 20-pair early release, permissions, idempotence passed');
  // Simulate each participant finishing exactly 116 and 119 assignments in order.
  const makeRows=appended.filter(r=>(r.user_id===a.id&&r.sequence_no<=116)
@@ -116,6 +135,14 @@ async function run(){
    'seed 116/120 and 119/120');
  const progress=ok(await adminClient.rpc('liminal_admin_auto_status'),'partial progress');
  assert.equal(progress.responseRows,235);
+ const myProgress=ok(await adminClient.rpc('liminal_my_progress'),'own partial-set progress');
+ const peerProgress=ok(await guestClient.rpc('liminal_my_progress'),'other own partial-set progress');
+ assert.deepEqual([myProgress.assigned,myProgress.completed,myProgress.currentSetStart,
+   myProgress.currentSetSize,myProgress.currentSetCompleted,myProgress.nextSequence],
+   [120,116,101,20,16,117]);
+ assert.deepEqual([peerProgress.assigned,peerProgress.completed,peerProgress.currentSetStart,
+   peerProgress.currentSetSize,peerProgress.currentSetCompleted,peerProgress.nextSequence],
+   [120,119,101,20,19,120]);
  assert.equal(progress.canActivate,true);
  assert.equal(progress.participants.find(p=>p.isYou)?.currentSetCompleted,16);
  assert.equal(progress.participants.find(p=>!p.isYou)?.currentSetCompleted,19);
@@ -130,6 +157,10 @@ async function run(){
    .eq('study_id',study.id),'verify 30-pair append');
  assert.equal(totals.length,300);
  assert.equal(totals.filter(r=>r.sequence_no>=121&&r.sequence_no<=150).length,60);
+ const myAfterSecond=ok(await adminClient.rpc('liminal_my_progress'),'participant after append');
+ assert.deepEqual([myAfterSecond.completed,myAfterSecond.assigned,myAfterSecond.currentSetStart,
+    myAfterSecond.currentSetSize,myAfterSecond.currentSetCompleted,myAfterSecond.nextSequence],
+    [116,150,101,20,16,117]);
  const unchanged=ok(await service.from('assignments').select('*').eq('study_id',study.id)
    .lte('sequence_no',100).order('id',{ascending:true}),'verify original preservation');
  assert.deepEqual(unchanged,original);
