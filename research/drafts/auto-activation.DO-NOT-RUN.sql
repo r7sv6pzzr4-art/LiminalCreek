@@ -1,6 +1,7 @@
 -- DEVELOPMENT DRAFT ONLY. DO NOT APPLY TO PRODUCTION.
--- Purpose: one authenticated administrator action generates and releases 20/40
--- matched shared-study pairs. No manual pair review or staging step.
+-- Purpose: one trusted administrator action generates and appends 10/20/30/40
+-- matched shared-study pairs with a chosen 50/50 or 25/75 sampling mix.
+-- No manual review is needed; the current set may be unfinished.
 -- Run in a disposable Supabase database after schema and existing live API.
 -- Never deploy until separate staging verification and explicit owner approval.
 -- Participant tables and existing RPCs are NOT altered by this draft.
@@ -10,8 +11,9 @@ CREATE TABLE IF NOT EXISTS public.liminal_auto_batches (
   study_id uuid NOT NULL REFERENCES public.studies(id) ON DELETE RESTRICT,
   request_id uuid NOT NULL UNIQUE,
   first_sequence integer NOT NULL CHECK (first_sequence >= 101),
-  pair_count integer NOT NULL CHECK (pair_count IN (20,40)),
-  source_response_count integer NOT NULL CHECK (source_response_count >= 200),
+  pair_count integer NOT NULL CHECK (pair_count BETWEEN 10 AND 40 AND pair_count%10=0),
+  source_response_count integer NOT NULL CHECK (source_response_count >= 0),
+  adaptive_percent smallint NOT NULL CHECK (adaptive_percent IN (50,75)),
   algorithm_version text NOT NULL DEFAULT 'shared-adaptive-v2',
   seed text NOT NULL,
   frozen_pairs jsonb NOT NULL,
@@ -28,7 +30,9 @@ CREATE OR REPLACE FUNCTION public.liminal_admin_auto_status()
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=''
 AS $$
 DECLARE sid uuid; members uuid[]; assigned_total bigint; responded_total bigint;
-        original_ready boolean; queues_ready boolean; next_seq integer;
+        assigned_a integer; assigned_b integer; completed_a integer; completed_b integer;
+        baseline_assigned boolean; queue_consistent boolean; unopened_batch boolean;
+        last_batch_start integer; next_seq integer;
 BEGIN
  SELECT p.study_id INTO sid FROM public.participants p
  JOIN public.studies s ON s.id=p.study_id
@@ -41,32 +45,60 @@ BEGIN
  IF coalesce(array_length(members,1),0)<>2 THEN RAISE EXCEPTION 'Exactly two members required'; END IF;
  SELECT count(*) INTO assigned_total FROM public.assignments a WHERE a.study_id=sid;
  SELECT count(*) INTO responded_total FROM public.responses r WHERE r.study_id=sid;
- original_ready := NOT EXISTS (
+ SELECT count(*) INTO assigned_a FROM public.assignments a WHERE a.study_id=sid AND a.user_id=members[1];
+ SELECT count(*) INTO assigned_b FROM public.assignments a WHERE a.study_id=sid AND a.user_id=members[2];
+ SELECT count(*) INTO completed_a FROM public.responses r WHERE r.study_id=sid AND r.user_id=members[1];
+ SELECT count(*) INTO completed_b FROM public.responses r WHERE r.study_id=sid AND r.user_id=members[2];
+ baseline_assigned := NOT EXISTS (
   SELECT 1 FROM unnest(members) AS uid
   WHERE (SELECT count(*) FROM public.assignments a
     WHERE a.study_id=sid AND a.user_id=uid AND a.sequence_no BETWEEN 1 AND 100)<>100
-   OR (SELECT count(*) FROM public.responses r JOIN public.assignments a
-      ON a.id=r.assignment_id WHERE a.study_id=sid AND a.user_id=uid
-      AND a.sequence_no BETWEEN 1 AND 100)<>100
  );
- queues_ready := assigned_total=responded_total
-   AND assigned_total>=200 AND mod(assigned_total,2)=0;
- next_seq := assigned_total/2+1;
+ queue_consistent := assigned_a=assigned_b AND assigned_total=2*assigned_a
+  AND assigned_a>=100 AND responded_total=completed_a+completed_b
+  AND completed_a<=assigned_a AND completed_b<=assigned_b
+  AND (SELECT count(DISTINCT a.pair_id) FROM public.assignments a WHERE a.study_id=sid)=assigned_a;
+ next_seq:=assigned_a+1;
+ SELECT max(b.first_sequence) INTO last_batch_start
+ FROM public.liminal_auto_batches b WHERE b.study_id=sid;
+ -- Allow one future, not-yet-started batch. New batches may be queued
+ -- as soon as either participant begins the latest appended batch.
+ unopened_batch:=last_batch_start IS NOT NULL
+               AND greatest(completed_a,completed_b)<last_batch_start;
  RETURN jsonb_build_object(
-  'studyId',sid,'originalReady',original_ready,
-  'queuesReady',queues_ready,'canActivate',original_ready AND queues_ready,
+  'studyId',sid,'baselineAssigned',baseline_assigned,
+  'queuesConsistent',queue_consistent,'unstartedBatchQueued',unopened_batch,
+  'canActivate',baseline_assigned AND queue_consistent AND NOT unopened_batch,
   'assignedRows',assigned_total,'responseRows',responded_total,
-  'nextSequence',next_seq,
-  'additionalPairs',greatest(0,next_seq-101),
-  'nextAdaptivePercent',CASE WHEN next_seq<=140 THEN 50 ELSE 75 END,
-  'participants',(SELECT jsonb_agg(jsonb_build_object(
-    'role',CASE WHEN p.user_id=members[1] THEN 'A' ELSE 'B' END,
-    'assigned',(SELECT count(*) FROM public.assignments a WHERE a.study_id=sid AND a.user_id=p.user_id),
-    'completed',(SELECT count(*) FROM public.responses r WHERE r.study_id=sid AND r.user_id=p.user_id),
-    'originalCompleted',(SELECT count(*) FROM public.responses r
-       JOIN public.assignments a ON a.id=r.assignment_id
-       WHERE r.study_id=sid AND r.user_id=p.user_id AND a.sequence_no<=100)
-   ) ORDER BY p.user_id) FROM public.participants p WHERE p.study_id=sid),
+  'nextSequence',next_seq,'additionalPairs',greatest(0,next_seq-101),
+  'recommendedAdaptivePercent',CASE WHEN next_seq<=140 THEN 50 ELSE 75 END,
+  'participants',(
+    SELECT jsonb_agg(jsonb_build_object(
+      'role',CASE WHEN p.user_id=members[1] THEN 'A' ELSE 'B' END,
+      'assigned',pr.assigned,'completed',pr.completed,
+      'originalCompleted',(SELECT count(*) FROM public.responses r
+         JOIN public.assignments a ON a.id=r.assignment_id
+         WHERE a.study_id=sid AND r.user_id=p.user_id AND a.sequence_no<=100),
+      'currentSetStart',coalesce(active_set.first_sequence,1),
+      'currentSetSize',coalesce(active_set.pair_count,100),
+      'currentSetCompleted',least(coalesce(active_set.pair_count,100),
+         greatest(0,pr.completed-coalesce(active_set.first_sequence,1)+1))
+    ) ORDER BY p.user_id)
+    FROM public.participants p
+    CROSS JOIN LATERAL (
+      SELECT
+       (SELECT count(*) FROM public.assignments a
+         WHERE a.study_id=sid AND a.user_id=p.user_id) AS assigned,
+       (SELECT count(*) FROM public.responses r
+         WHERE r.study_id=sid AND r.user_id=p.user_id) AS completed
+    ) pr
+    LEFT JOIN LATERAL (
+      SELECT b.first_sequence,b.pair_count FROM public.liminal_auto_batches b
+      WHERE b.study_id=sid AND b.first_sequence<=pr.completed+1
+      ORDER BY b.first_sequence DESC LIMIT 1
+    ) active_set ON TRUE
+    WHERE p.study_id=sid
+  ),
   'releasedBatches',(SELECT count(*) FROM public.liminal_auto_batches b WHERE b.study_id=sid)
  );
 END $$;
