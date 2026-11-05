@@ -233,6 +233,17 @@ function generateBatch(options){
   const adaptiveSlots=shuffled(totals.filter(x=>x.mode!=='broad')
     .flatMap(({mode,count:n})=>Array(n).fill(mode)),adaptiveRng);
   const slots=[...Array(broadCount).fill('broad'),...adaptiveSlots];
+  // Memoize each candidate's nearest assigned location. The previous
+  // implementation rescanned every old assignment for every candidate,
+  // for every selected site (tens of millions of repeated distances).
+  // Reuse the exact minimum and update it only when a new pair is chosen.
+  const allCandidates=[...controlPool,...adaptivePool];
+  for(const item of allCandidates){
+    let nearest=Infinity;
+    for(const p of used)nearest=Math.min(nearest,distance(item.point,p));
+    item.minUsed=nearest;
+    item.minNew=Infinity;
+  }
   const output=[];
   for(let j=0;j<slots.length;j++){
     const mode=slots[j],isControl=mode==='broad';
@@ -241,9 +252,9 @@ function generateBatch(options){
     let chosen=null,best=-Infinity;
     for(const item of pool){
       if(item.taken)continue;
-      const minUsed=used.length?Math.min(...used.map(p=>distance(item.point,p))):Infinity;
+      const minUsed=item.minUsed;
       if(minUsed<12)continue;
-      const minNew=output.length?Math.min(...output.map(p=>distance(item.point,p.A))):Infinity;
+      const minNew=item.minNew;
       if(minNew<25)continue;
       // Broad sites are spatial controls: prefer novel, well-spaced coverage.
       const gapDistance=Math.min(minUsed,minNew);
@@ -263,6 +274,15 @@ function generateBatch(options){
     output.push({id:'adaptive-'+batchIndex+'-'+(j+1),batchIndex,mode,
       A:chosen.point.slice(),B:b,maximumSeparationMeters:maxDist});
     used.push(chosen.point,b);
+    // Exactly equivalent to rescanning `used` and `output` on the next
+    // iteration: minUsed includes both endpoints, minNew includes A only.
+    for(const item of allCandidates){
+      if(item.taken)continue;
+      const da=distance(item.point,chosen.point);
+      const db=distance(item.point,b);
+      item.minUsed=Math.min(item.minUsed,da,db);
+      item.minNew=Math.min(item.minNew,da);
+    }
   }
   // Interleave controls with response-informed sites in a deterministic
   // private order. Selection was separated to protect controls from bias.
