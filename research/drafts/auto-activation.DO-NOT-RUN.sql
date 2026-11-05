@@ -75,6 +75,7 @@ BEGIN
   'participants',(
     SELECT jsonb_agg(jsonb_build_object(
       'role',CASE WHEN p.user_id=members[1] THEN 'A' ELSE 'B' END,
+      'isYou',p.user_id=auth.uid(),
       'assigned',pr.assigned,'completed',pr.completed,
       'originalCompleted',(SELECT count(*) FROM public.responses r
          JOIN public.assignments a ON a.id=r.assignment_id
