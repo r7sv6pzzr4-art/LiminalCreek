@@ -50,7 +50,8 @@ UNION ALL
 SELECT '11111111-1111-4111-8111-111111111111'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,
  pair_id,n,-74.1699+n*0.00008,40.3201,'broad' FROM pairs;
 INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
- SELECT id,study_id,user_id,'neutral',NULL FROM public.assignments;
+ SELECT id,study_id,user_id,'neutral',NULL FROM public.assignments
+ WHERE user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid OR sequence_no<=88;
 CREATE TEMP TABLE original_hash AS SELECT
  md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id)) as hash
  FROM public.assignments a WHERE sequence_no<=100;
@@ -78,7 +79,9 @@ DECLARE stat jsonb;
 BEGIN
  stat:=public.liminal_admin_auto_status();
  IF (stat->>'canActivate')::boolean IS DISTINCT FROM true
- THEN RAISE EXCEPTION 'Expected eligible full-original study'; END IF;
+ THEN RAISE EXCEPTION 'Expected eligible partly completed original study'; END IF;
+ IF (stat->>'responseRows')::integer<>188 OR (stat->'participants'->0->>'completed')::integer<>88
+ THEN RAISE EXCEPTION 'Readiness must use the 188 submitted responses'; END IF;
  IF has_function_privilege('authenticated','public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb)','EXECUTE')
  THEN RAISE EXCEPTION 'Client may execute coordinate insertion RPC'; END IF;
 END $$;
@@ -97,16 +100,16 @@ BEGIN
  ) ORDER BY n) INTO manifest FROM generate_series(1,20) n;
  outcome:=public.liminal_admin_commit_auto_batch(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,200,
-  'synthetic-fixed-long-seed',manifest);
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,188,
+  'synthetic-fixed-long-seed',50,manifest);
  IF (outcome->>'addedPairs')::integer<>20 OR (outcome->>'firstSequence')::integer<>101
  THEN RAISE EXCEPTION 'Unexpected release outcome'; END IF;
  -- A double-click with a different ID may not append while queues are unfinished.
  BEGIN
   PERFORM public.liminal_admin_commit_auto_batch(
    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-   'dddddddd-dddd-4ddd-8ddd-dddddddddddd',240,200,
-   'synthetic-fixed-long-seed',manifest);
+   'dddddddd-dddd-4ddd-8ddd-dddddddddddd',240,188,
+   'synthetic-fixed-long-seed',50,manifest);
   RAISE EXCEPTION 'TEST_FAILURE_DOUBLE_RELEASE_ALLOWED';
  EXCEPTION WHEN OTHERS THEN
   IF SQLERRM='TEST_FAILURE_DOUBLE_RELEASE_ALLOWED' THEN RAISE; END IF;
@@ -114,8 +117,8 @@ BEGIN
  -- Same request ID is idempotent even after the queue changes.
  outcome:=public.liminal_admin_commit_auto_batch(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,200,
-  'synthetic-fixed-long-seed',manifest);
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',200,188,
+  'synthetic-fixed-long-seed',50,manifest);
  IF (outcome->>'alreadyCommitted')::boolean IS DISTINCT FROM true THEN
   RAISE EXCEPTION 'Activation retry was not idempotent';
  END IF;
@@ -130,7 +133,7 @@ BEGIN
  FROM public.assignments a WHERE sequence_no<=100;
  IF prev<>after THEN RAISE EXCEPTION 'Original 200 assignments mutated'; END IF;
  IF (SELECT count(*) FROM public.assignments)<>240
- OR (SELECT count(*) FROM public.responses)<>200
+ OR (SELECT count(*) FROM public.responses)<>188
  OR (SELECT count(*) FROM public.liminal_auto_batches)<>1
  THEN RAISE EXCEPTION 'Unexpected assignment, response or batch count'; END IF;
  IF EXISTS(SELECT 1 FROM public.participants p
@@ -141,26 +144,37 @@ BEGIN
      WHERE sequence_no>100)<>20
  THEN RAISE EXCEPTION 'Appended pair mismatch'; END IF;
 END $$;
--- Simulate both completing locations 101–120 before a second activation.
+-- Complete the remaining initial 12 for A, then only 16/20 and 19/20
+-- of the appended set. The next 40-pair request must still be allowed.
 INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
  SELECT a.id,a.study_id,a.user_id,'neutral',NULL
- FROM public.assignments a WHERE a.sequence_no BETWEEN 101 AND 120;
+ FROM public.assignments a WHERE
+ (a.user_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid AND
+   (a.sequence_no BETWEEN 89 AND 100 OR a.sequence_no BETWEEN 101 AND 116))
+ OR (a.user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid AND
+   a.sequence_no BETWEEN 101 AND 119);
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
 DO $$
-DECLARE manifest jsonb; result jsonb;
+DECLARE manifest jsonb; result jsonb; stat jsonb;
 BEGIN
+ stat:=public.liminal_admin_auto_status();
+ IF (stat->>'canActivate')::boolean IS DISTINCT FROM true OR
+  (stat->>'responseRows')::integer<>235 OR
+  (stat->'participants'->0->>'currentSetCompleted')::integer<>16 OR
+  (stat->'participants'->1->>'currentSetCompleted')::integer<>19
+ THEN RAISE EXCEPTION 'Expected 16/20 and 19/20 partial-set readiness'; END IF;
  SELECT jsonb_agg(jsonb_build_object(
-  'pairId',gen_random_uuid(),'mode',CASE WHEN mod(n,2)=0 THEN 'broad' ELSE 'interesting' END,
+  'pairId',gen_random_uuid(),'mode',CASE WHEN mod(n,4)=0 THEN 'broad' ELSE 'interesting' END,
   'longitudeA',-74.165+n*0.00005,'latitudeA',40.325,
   'longitudeB',-74.1649+n*0.00005,'latitudeB',40.3251,
   'orderA',n,'orderB',41-n,
-  'adaptivePercent',CASE WHEN n<=20 THEN 50 ELSE 75 END
+  'adaptivePercent',75
  ) ORDER BY n) INTO manifest FROM generate_series(1,40) n;
  result:=public.liminal_admin_commit_auto_batch(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',240,240,
-  'synthetic-second-long-seed',manifest);
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',240,235,
+  'synthetic-second-long-seed',75,manifest);
  IF (result->>'addedPairs')::integer<>40 OR (result->>'firstSequence')::integer<>121
  THEN RAISE EXCEPTION '40-pair activation failed'; END IF;
 END $$;
@@ -168,7 +182,7 @@ RESET ROLE;
 DO $$
 BEGIN
  IF (SELECT count(*) FROM public.assignments)<>320 OR
-    (SELECT count(*) FROM public.responses)<>240 OR
+    (SELECT count(*) FROM public.responses)<>235 OR
     (SELECT count(*) FROM public.liminal_auto_batches)<>2
  THEN RAISE EXCEPTION '40-pair append has wrong totals'; END IF;
  IF (SELECT count(DISTINCT pair_id) FROM public.assignments
@@ -179,5 +193,5 @@ BEGIN
    FROM public.assignments a WHERE a.sequence_no<=100)
  THEN RAISE EXCEPTION 'Original assignments modified after second release'; END IF;
 END $$;
-SELECT 'PASS: role restrictions, 20 and 40 matched-pair activations, idempotence, originals unchanged' AS result;
+SELECT 'PASS: 88/100 original and 16/20 + 19/20 partial sets; 20/40 queue appends; original assignments unchanged' AS result;
 
