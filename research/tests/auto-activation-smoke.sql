@@ -201,5 +201,68 @@ BEGIN
    FROM public.assignments a WHERE a.sequence_no<=100)
  THEN RAISE EXCEPTION 'Original assignments modified after second release'; END IF;
 END $$;
-SELECT 'PASS: 88/100 original and 16/20 + 19/20 partial sets; 20/40 queue appends; original assignments unchanged' AS result;
+-- Catch up to the start of the 40-pair set; only A completes location 121.
+INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
+ SELECT a.id,a.study_id,a.user_id,'neutral',NULL
+ FROM public.assignments a
+ WHERE (a.user_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid AND a.sequence_no BETWEEN 117 AND 121)
+    OR (a.user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid AND a.sequence_no=120);
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+DO $
+DECLARE m jsonb; result jsonb;
+BEGIN
+ SELECT jsonb_agg(jsonb_build_object(
+  'pairId',gen_random_uuid(),'mode',CASE WHEN n<=5 THEN 'broad' ELSE 'interesting' END,
+  'longitudeA',-74.161+n*0.00004,'latitudeA',40.323,
+  'longitudeB',-74.1609+n*0.00004,'latitudeB',40.3231,
+  'orderA',n,'orderB',11-n,'adaptivePercent',50
+ ) ORDER BY n) INTO m FROM generate_series(1,10) n;
+ result:=public.liminal_admin_commit_auto_batch(
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+   'ffffffff-ffff-4fff-8fff-ffffffffffff',320,241,
+   'synthetic-third-long-seed',50::smallint,m);
+ IF (result->>'addedPairs')::integer<>10 OR (result->>'firstSequence')::integer<>161
+ THEN RAISE EXCEPTION '10-pair activation failed'; END IF;
+END $;
+RESET ROLE;
+-- Start the 10-location set after completing the remaining 40 locations.
+INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
+ SELECT a.id,a.study_id,a.user_id,'neutral',NULL FROM public.assignments a
+ WHERE (a.user_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid AND a.sequence_no BETWEEN 122 AND 161)
+    OR (a.user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid AND a.sequence_no BETWEEN 121 AND 160);
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+DO $
+DECLARE m jsonb; result jsonb;
+BEGIN
+ SELECT jsonb_agg(jsonb_build_object(
+  'pairId',gen_random_uuid(),'mode',CASE WHEN n<=7 THEN 'broad' ELSE 'interesting' END,
+  'longitudeA',-74.16+n*0.00004,'latitudeA',40.326,
+  'longitudeB',-74.1599+n*0.00004,'latitudeB',40.3261,
+  'orderA',n,'orderB',31-n,'adaptivePercent',75
+ ) ORDER BY n) INTO m FROM generate_series(1,30) n;
+ result:=public.liminal_admin_commit_auto_batch(
+   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+   '12345678-1234-4234-8234-123456789abc',340,321,
+   'synthetic-fourth-long-seed',75::smallint,m);
+ IF (result->>'addedPairs')::integer<>30 OR (result->>'firstSequence')::integer<>171
+ THEN RAISE EXCEPTION '30-pair activation failed'; END IF;
+END $;
+RESET ROLE;
+DO $
+BEGIN
+ IF (SELECT count(*) FROM public.assignments)<>400 OR
+    (SELECT count(*) FROM public.responses)<>321 OR
+    (SELECT count(*) FROM public.liminal_auto_batches)<>4
+ THEN RAISE EXCEPTION 'Flexible batch size assignment counts differ'; END IF;
+ IF EXISTS(SELECT 1 FROM public.participants p WHERE
+    (SELECT count(*) FROM public.assignments a WHERE a.user_id=p.user_id)<>200)
+ THEN RAISE EXCEPTION 'Appended queue does not contain 200 locations each'; END IF;
+ IF (SELECT hash FROM original_hash)<>(
+    SELECT md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id))
+    FROM public.assignments a WHERE a.sequence_no<=100)
+ THEN RAISE EXCEPTION 'Original assignments mutated'; END IF;
+END $;
+SELECT 'PASS: 10/20/30/40 early-queued batches, selectable 50/75 ratio, originals unchanged' AS result;
 
