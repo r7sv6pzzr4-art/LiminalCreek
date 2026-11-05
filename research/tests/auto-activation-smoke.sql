@@ -5,9 +5,9 @@ CREATE ROLE anon NOLOGIN;
 CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
- SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $;
+ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
- SELECT nullif(current_setting('request.jwt.claim.role',true),'')::text $;
+ SELECT nullif(current_setting('request.jwt.claim.role',true),'')::text $$;
 GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 CREATE TABLE public.studies (
