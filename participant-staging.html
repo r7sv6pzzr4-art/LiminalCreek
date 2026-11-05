@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#172f2a"><title>LiminalCreek — SYNTHETIC STAGING PREVIEW</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#e9ede5;background:#142b27}*{box-sizing:border-box}body{margin:0}header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#142b27}h1{font-family:Georgia,serif;font-size:1.55rem;letter-spacing:.035em;margin:0}small,.hint{color:#aabdb3}button,select,textarea,input{font:inherit}button{cursor:pointer;border:1px solid #789387;border-radius:11px;background:#24463c;color:white;padding:10px 13px}button:disabled{opacity:.4}button.active{background:#63836a;color:#fff}.tabs{display:flex;gap:5px;padding:0 12px 10px;overflow:auto}.tabs button{flex:1;white-space:nowrap;font-size:.88rem}.tabs button.selected{background:#b9c6a3;color:#11231d}#map{height:45dvh;min-height:270px;background:#20342c}main{max-width:850px;margin:auto;padding:14px 17px 80px}section{display:none}section.visible{display:block}h2{font-family:Georgia,serif;font-size:1.35rem;margin:8px 0 12px}p{line-height:1.5} .row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.row>button{flex:1;min-width:92px}.panel{background:#203b33;padding:15px;border:1px solid #3d5e50;border-radius:14px;margin:10px 0}label{display:block;margin:12px 0 6px}textarea,select,input[type=number]{width:100%;background:#10251e;border:1px solid #708f81;border-radius:9px;padding:10px;color:white}textarea{min-height:70px}#details button{margin:3px}#details button.chosen{background:#adc3a0;color:#14261e}.small{font-size:.85rem;color:#b8c6be}.error{color:#ffd2b8}.ok{color:#d5e9b9}.leaflet-container{font-family:system-ui,sans-serif}footer{font-size:.8rem;color:#afc0b4;margin-top:28px} 
+
+/* Immersive editing mode: Leaflet controls remain available and the map fills the screen. */
+#fullscreenToggle{position:absolute;z-index:750;top:56px;right:12px;background:#142b27eb;box-shadow:0 2px 10px #0005;padding:10px 14px}
+#map{position:relative}
+body.map-fullscreen{overflow:hidden}
+body.map-fullscreen #map{position:fixed;inset:0;width:100vw;height:100dvh;min-height:0;z-index:1100}
+body.map-fullscreen #fullscreenToggle{z-index:1200}
+body.map-fullscreen .leaflet-top.leaflet-right{top:56px}
+
+/* In observation mode the map is the canvas; the questionnaire is a sliding bottom dock. */
+body.place-mode,body.setup-mode{height:100dvh;overflow:hidden}
+body.place-mode #map,body.setup-mode:not(.map-fullscreen) #map{height:calc(100dvh - var(--top-height, 116px));min-height:0}
+body.place-mode main,body.setup-mode main{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(100%,850px);max-height:min(70dvh,650px);overflow-y:auto;overscroll-behavior:contain;z-index:850;background:#142b27f7;border:1px solid #536b5c;border-bottom:0;border-radius:18px 18px 0 0;box-shadow:0 -7px 26px #0005;padding:0 17px calc(14px + env(safe-area-inset-bottom));transition:max-height .22s ease;scrollbar-width:thin}
+body.place-mode main.dock-collapsed,body.setup-mode main.dock-collapsed{max-height:54px;overflow:hidden}
+body.place-mode main footer,body.setup-mode main footer{display:none}
+#dockHandle{display:none}
+body.place-mode #dockHandle,body.setup-mode #dockHandle{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;position:sticky;top:0;z-index:3;width:100%;min-height:50px;border:0;border-radius:0;background:#142b27;color:#bfcfc1;touch-action:pan-y;user-select:none;cursor:grab;font-size:.83rem}
+#dockGrip{display:block;width:48px;height:5px;border-radius:99px;background:#98ac9e}
+body.place-mode main.dock-collapsed #dockHandle,body.setup-mode main.dock-collapsed #dockHandle{cursor:pointer}
+body.place-mode #place,body.setup-mode #setup{padding-bottom:12px}
+[hidden]{display:none!important}
+#liveReload{font-size:.78rem;padding:6px 10px;margin:0 0 8px auto;display:block;opacity:.75}
+body.place-mode #fullscreenToggle{display:none}body.setup-mode.map-fullscreen main{z-index:1200}
+@media(min-width:851px){body.place-mode main,body.setup-mode main{border-radius:18px 18px 0 0}}
+
+/* Attribution is required but need not sit at the foot of the page.
+   Keep it visible above the collapsible questionnaire dock. */
+/* Quiet dark attribution, positioned directly above the minimized dock. */
+body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet-bottom.leaflet-right{
+  position:fixed;bottom:0;top:auto;right:auto;left:0;z-index:1300
+}
+#map .leaflet-control-attribution{
+  max-width:min(48vw,360px);font-size:10px;line-height:1.3;
+  color:#bdccbf;background:rgba(20,43,39,.89);
+  padding:4px 8px;border-radius:7px 7px 0 0;
+  box-shadow:0 1px 6px #0004
+}
+#map .leaflet-control-attribution a{color:#c8e4cb;text-decoration:underline;text-underline-offset:2px}
+/* Keep imagery attribution visible at the lower-right edge, even above an open dock. */
+#dockCredits{display:none;color:#9fb5a7;font-size:10px;margin:4px 0 8px;text-align:right}
+/* Attribution stays on the map edge; avoid duplicating it inside the dock. */
+#dockCredits a{color:#c8e4cb}
+
+#imageryCredit{display:none;position:fixed;right:0;bottom:0;z-index:1300;font-size:10px;line-height:1.3;color:#bdccbf;background:rgba(20,43,39,.89);padding:4px 8px;border-radius:7px 7px 0 0;box-shadow:0 1px 6px #0004;pointer-events:none}body.place-mode #imageryCredit,body.setup-mode #imageryCredit{display:block}
+/* Slightly brighten the streamed 2020 imagery without changing 2007 or OSM. */
+.leaflet-tile.aerial-2020{filter:brightness(1.16)}
+/* Prevent the standard hover-to-open layers behavior; JavaScript also blocks hover events below. */
+.leaflet-control-layers.liminal-click-layers:not(.leaflet-control-layers-expanded) .leaflet-control-layers-list{display:none}
+/* Small, precise editing vertices. */
+.leaflet-div-icon.leaflet-editing-icon{width:12px!important;height:12px!important;margin-left:-6px!important;margin-top:-6px!important;border-radius:50%;border:2px solid #fff!important;background:#d65a37!important;box-shadow:0 0 0 1px #73321e}
+/* Leaflet.draw uses opacity .6 for intermediate add-vertex handles. */
+.leaflet-div-icon.leaflet-editing-icon.leaflet-marker-draggable{opacity:1}
+.leaflet-div-icon.leaflet-editing-icon[style*="opacity: 0.6"]{width:7px!important;height:7px!important;margin-left:-3.5px!important;margin-top:-3.5px!important;background:#90d9f5!important;border:1px solid #276d94!important;box-shadow:0 0 0 1px #e4f7ff;opacity:.9!important}
+.leaflet-draw-toolbar a.liminal-exclude-tool{display:block!important;width:30px!important;height:30px!important;background-color:#fff!important;color:transparent!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M5 7 L17 4 L22 13 L17 22 L5 18 Z' fill='none' stroke='%234a625c' stroke-width='1.7' stroke-linejoin='round'/%3E%3Cpath d='M4 22 L22 4' stroke='%23dc773d' stroke-width='2.7' stroke-linecap='round'/%3E%3C/svg%3E")!important;background-size:26px 26px!important;background-position:center!important;background-repeat:no-repeat!important;text-decoration:none}
+.leaflet-draw-toolbar a.liminal-exclude-tool:hover{background-color:#e6ebe5!important}
+#authPanel{margin:12px auto;max-width:850px;padding:12px 17px;background:#203b33;border:1px solid #3d5e50;border-radius:12px}
+#authPanel .auth-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#authPanel input{flex:1;min-width:180px;background:#10251e;border:1px solid #708f81;color:#fff;border-radius:8px;padding:10px}
+#authPanel p{margin:6px 0;font-size:.86rem;color:#b8c6be}
+header .header-account{display:flex;flex-direction:column;align-items:flex-end;gap:3px}#accountButton{font-size:.78rem;padding:2px 0;background:none;border:0;color:#b7c8b9;text-decoration:underline;text-underline-offset:3px}#authPanel{display:none}#authPanel[open]{display:block;position:fixed;top:90px;left:10px;right:10px;max-width:850px;max-height:70dvh;overflow:auto;z-index:1600;box-shadow:0 8px 32px #0009}#authPanel>summary{display:none}@media(min-width:870px){#authPanel[open]{left:calc(50% - 425px);right:auto;width:850px}}
+</style></head><body><div role='status' style='background:#703a20;color:#fff;padding:10px 16px;text-align:center;font-weight:700'>STAGING PARTICIPANT PREVIEW · SYNTHETIC STUDY ONLY · mrelwvpixalfycfdarjf</div>
+<header><div><h1>LiminalCreek · STAGING</h1><small>SYNTHETIC TEST DATA — NOT THE LIVE STUDY</small></div><div class="header-account"><span id="identity" class="small"></span><a id="adminToolsLink" href="./admin-adaptive.html" hidden style="color:#d3e7d3;font-size:.85rem">Admin</a><button type="button" id="accountButton" aria-controls="authPanel" aria-expanded="false">Account</button></div></header>
+<details id="authPanel"><summary>Account · <span id="authIdentity">Not signed in</span></summary><p class="small">STAGING ONLY: Use one of the two synthetic test accounts. Do not enter your real study credentials.</p><label for="stagingKey">Staging publishable API key (sb_publishable_…)</label><input id="stagingKey" type="text" autocomplete="off" spellcheck="false" placeholder="sb_publishable_…" aria-label="Staging publishable key"><label for="stagingPassword">Synthetic staging account password</label><input id="stagingPassword" type="password" autocomplete="current-password" placeholder="Test password"><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Sign in to staging</button><button type="button" id="authSignOut" hidden>Sign out</button></div><div class="auth-row" id="authLinkRow" hidden><input id="authPasteLink" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the sign-in link from your email" aria-label="Paste sign-in email link"><button type="button" id="authUseLink">Sign in with pasted link</button></div><p id="authLinkHelp" hidden>For the Home Screen app: request an email, then <strong>copy</strong> its sign-in link (do not open it). Return here, paste it, and tap Sign in. The link can be used only once.</p><p id="authStatus" aria-live="polite">Connecting…</p></details>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+ const btn=document.getElementById('accountButton'),panel=document.getElementById('authPanel'),label=document.getElementById('authIdentity');
+ btn.addEventListener('click',()=>{panel.open=!panel.open;btn.setAttribute('aria-expanded',String(panel.open))});
+ const refresh=()=>{btn.textContent=label.textContent.startsWith('Signed in:')?'Account':'Account (Logged out)'};
+ new MutationObserver(refresh).observe(label,{childList:true,characterData:true,subtree:true});refresh();
+});
+</script>
+<nav class="tabs"><button data-page="place" class="selected">Today's place</button><button data-page="progress">Progress</button><button data-page="setup" id="prototypeSetupTab" hidden>Study setup</button></nav>
+<div id="map" role="application" aria-label="Map of Ramanessin Creek area"><span id="imageryCredit">2007 aerial imagery</span><button type="button" id="fullscreenToggle" aria-pressed="false" title="Expand map to full screen">⛶ Full map</button></div>
+<main id="bottomPanel"><button type="button" id="dockHandle" aria-expanded="true" aria-label="Hide or show questionnaire"><span id="dockGrip"></span><span id="dockCaption">Hide questions ↓</span></button>
+<section id="place" class="visible"><div class="row" id="prototypeTools" hidden><button id="modeToggle" type="button">Return to study</button></div><button id="liveReload" type="button" hidden>Refresh assignment</button><p id="liveBanner" class="small" hidden></p><div id="dockCredits">Map: <a href="https://leafletjs.com/" target="_blank" rel="noopener">Leaflet</a> · <span id="creditSource">NJGIN 2007 imagery</span></div><h2>What does this place evoke?</h2><p id="placeStatus" class="hint">Draw eligible areas in Study setup, then generate your first place.</p><div class="row" id="invitation"><button id="present">Present a place</button></div><div id="question" hidden><p class="small">Consider the highlighted surroundings. Most places may evoke no particular impression; there is no need to force one.</p>
+<div class="row" id="valence"><button data-v="good">Good</button><button data-v="neutral">Neutral</button><button data-v="bad">Bad</button><button data-v="mixed">Mixed / uncertain</button></div>
+<div id="details"></div>
+<div id="strengthWrap" hidden><label for="strength">How strong is the impression?</label><select id="strength"><option value="">Choose strength</option><option value="1">1 — Faint</option><option value="2">2 — Moderate</option><option value="3">3 — Strong</option><option value="4">4 — Very strong</option></select></div>
+<label for="note">Anything else? (optional)</label><textarea id="note" placeholder="A few words, if you wish…"></textarea>
+<div class="row"><button id="save">Record impression</button><button id="skip">Skip for now</button></div></div>
+<p id="feedback" aria-live="polite"></p></section>
+<section id="progress"><h2>Progress</h2><div class="panel"><p id="stats">No entries yet.</p></div><p class="hint">Your recorded impressions remain hidden until the study is complete.</p></section>
+<section id="setup"><h2>Study setup</h2><p>Use the polygon tool on the map to draw eligible territory. Overlaps are fine: all polygons form one combined sampling area. You can edit or delete shapes. Only eligible coverage matters, not individual polygon boundaries.</p>
+<div class="panel"><label for="person">Test participant</label><select id="person"><option value="A">Participant A</option><option value="B">Participant B</option></select>
+<label for="pairs">Number of paired locations</label><input type="number" id="pairs" min="2" max="2000" value="100">
+<label for="separation">Maximum distance between paired locations (feet)</label><input type="number" id="separation" min="0" max="1000" value="200">
+<div class="row"><button id="joinAreas">Join & simplify areas</button></div><p class="small">Joins overlaps and shared edges, then reduces unnecessary vertices. Interior exclusions appear as orange editable outlines after joining. A backup is downloaded before changes. You can still move vertices, edit boundaries, or add polygons afterward.</p><div class="row"><button id="generate">Generate paired locations</button><button id="viewLocations" aria-pressed="false">View locations</button><button id="export">Export prototype data</button><button id="import">Import polygons / study JSON</button><button id="newProject" type="button">Start blank project</button></div><input type="file" id="importFile" accept=".json,.geojson,application/json" hidden><p class="small" id="setupStatus"></p><p class="small" id="locationPreviewInfo" hidden>Preview of both participants’ initial paired locations. Lines connect each pair. Visible only in study setup, before the real study is initialized.</p></div>
+<p class="small">Experimental controls: ten responses maximum per local calendar day; independently shuffled pair order; eligible-area checks; no final map or partner results. Generated data are local and can be cleared by browser storage. This local editing workspace is separate from the active study and does not change live assignments.</p></section>
+<footer>LiminalCreek · 2007 NJ aerial imagery via NJGIN, where available · OpenStreetMap fallback</footer></main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script><script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="./sampling.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script defer src="./auth-staging.js?v=20261105s"></script>
+<script>
+(()=>{'use strict';
+const KEY='liminalcreek-staging-preview-v01', DAYMAX=10, FT=0.3048;
+const categories={good:['Associated with good memories','Feels imprinted with human happiness','Full of the goodness of nature','Associated with benevolent spirits or spirit animals'],bad:['Associated with bad or sad memories','Feels imprinted with human suffering or unhappiness','Feels creepy or haunted','Feels spiritually unwelcoming','Associated with unfriendly spirits or spirit animals'],neutral:['I have no particular feelings about this place',"I'm unfamiliar with this place"],mixed:['Both positive and negative feelings','A pleasant sense of melancholy or wistfulness','A haunting sense of emptiness, solitude, or something lost']};
+let state;try{state=JSON.parse(localStorage.getItem(KEY))}catch(e){}state ||= {polygons:{type:'FeatureCollection',features:[]},pairs:[],responses:[],queues:{A:[],B:[]},cursor:{A:0,B:0},person:'A'};
+const $=id=>document.getElementById(id), saveState=()=>localStorage.setItem(KEY,JSON.stringify(state)), info=(id,s)=>{$(id).textContent=s}, today=()=>new Date().toLocaleDateString('en-CA');
+const map=L.map('map',{zoomControl:true}).setView([40.333,-74.165],13);
+const aerial=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2007',{layers:'Natural2007',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'<a href="https://njgin.nj.gov/" target="_blank" rel="noopener">NJGIN</a>',maxZoom:20});
+const aerial2020=L.tileLayer.wms('https://img.nj.gov/imagerywms/Natural2020',{layers:'Natural2020',format:'image/jpeg',transparent:false,version:'1.1.1',attribution:'<a href="https://njgin.nj.gov/" target="_blank" rel="noopener">NJGIN</a>',maxZoom:20,className:'aerial-2020'});
+const osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+aerial.on('tileerror',()=>info('setupStatus','NJ aerial imagery failed to load; use OpenStreetMap layer while service configuration is checked.'));
+L.control.layers({'NJ 2007 aerial':aerial,'NJ 2020 aerial':aerial2020,'OpenStreetMap':osm},{},{collapsed:true,hideSingleBase:false}).addTo(map);
+// Leaflet's default layer-control expansion is hover-driven; replace that with click-only.
+const layersToggle=document.querySelector('.leaflet-control-layers-toggle');
+if(layersToggle){const controlBox=layersToggle.closest('.leaflet-control-layers');controlBox?.classList.add('liminal-click-layers');
+ // Leaflet registers mouseover on the outer control. Stop it at capture phase;
+ // click continues to use Leaflet's own expand/collapse behavior.
+ controlBox?.addEventListener('mouseover',e=>e.stopImmediatePropagation(),true);
+ controlBox?.addEventListener('mouseout',e=>e.stopImmediatePropagation(),true);
+}
+aerial.addTo(map);osm.remove();
+map.on('baselayerchange',e=>{$('imageryCredit').textContent=e.layer===osm?'OpenStreetMap':e.layer===aerial2020?'2020 aerial imagery':'2007 aerial imagery';$('creditSource').textContent=e.layer===osm?'© OpenStreetMap contributors':e.layer===aerial2020?'NJGIN 2020 imagery':'NJGIN 2007 imagery'});
+const polygons=new L.FeatureGroup().addTo(map), areaFill=L.geoJSON(null,{style:{color:'transparent',weight:0,fillColor:'#b7d6ae',fillOpacity:.23},interactive:false}).addTo(map), dotLayer=L.layerGroup().addTo(map), previewLayer=L.layerGroup().addTo(map);
+// Leaflet.draw cannot conveniently select the interior of polygon holes.
+// Represent exclusions as editable overlay rings and reconstruct the GeoJSON holes on save.
+function renderPolygons(){
+ polygons.clearLayers();areaFill.clearLayers();
+ areaFill.addData(state.polygons);
+ for(const f of (state.polygons.features||[])){
+  const components=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.type==='MultiPolygon'?f.geometry.coordinates:[];
+  for(const rings of components){
+   if(!rings.length)continue;
+   const outer=L.polygon(rings[0].map(c=>[c[1],c[0]]),{color:'#c8e3b4',weight:2,fillOpacity:0});
+   outer._liminalHole=false;polygons.addLayer(outer);
+   for(const ring of rings.slice(1)){
+    const hole=L.polygon(ring.map(c=>[c[1],c[0]]),{color:'#f2b480',weight:2,dashArray:'6 4',fillOpacity:0});
+    hole._liminalHole=true;hole.bindTooltip('Excluded area — use Edit to move vertices');polygons.addLayer(hole);
+   }
+  }
+ }
+}
+function syncPolygons(){
+ try{
+  const outers=[],holes=[];
+  polygons.eachLayer(layer=>{
+   const g=layer.toGeoJSON();
+   (layer._liminalHole?holes:outers).push(g);
+  });
+  if(!outers.length){state.polygons={type:'FeatureCollection',features:[]};saveState();return}
+  if(!window.turf)throw Error('Polygon geometry library unavailable');
+  let shape=outers[0];
+  for(const feature of outers.slice(1))shape=turf.union(shape,feature);
+  if(!shape)throw Error('Could not combine included areas');
+  for(const hole of holes){
+   const trimmed=turf.difference(shape,hole);
+   if(trimmed)shape=trimmed;
+  }
+  const components=shape.geometry.type==='Polygon'?[shape.geometry.coordinates]:shape.geometry.coordinates;
+  state.polygons={type:'FeatureCollection',features:components.map(coordinates=>({type:'Feature',properties:{},geometry:{type:'Polygon',coordinates}}))};
+  saveState();
+  renderPolygons();
+  info('setupStatus',state.polygons.features.length+' eligible area(s) saved, including '+holes.length+' editable exclusion(s).');
+ }catch(e){info('setupStatus','Area edit not saved: '+e.message+'. Reload or restore your exported backup if needed.')}
+}
+renderPolygons();
+
+const fullscreenButton=$('fullscreenToggle');
+function setMapFullscreen(on){
+ document.body.classList.toggle('map-fullscreen',on);
+ fullscreenButton.textContent=on?'✕ Exit full map':'⛶ Full map';
+ fullscreenButton.setAttribute('aria-pressed',String(on));
+ fullscreenButton.title=on?'Return to normal layout':'Expand map to full screen';
+ setTimeout(()=>map.invalidateSize(),80);
+}
+fullscreenButton.addEventListener('click',()=>setMapFullscreen(!document.body.classList.contains('map-fullscreen')));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false)});
+let drawingExclusion=false,exclusionDrawer=null;
+const drawControl=new L.Control.Draw({edit:{featureGroup:polygons},draw:{polygon:{allowIntersection:false},rectangle:true,polyline:false,circle:false,circlemarker:false,marker:false}});
+// Add a custom tool to the Leaflet drawing toolbar, alongside Polygon/Rectangle.
+const originalOnAdd=drawControl.onAdd.bind(drawControl);
+drawControl.onAdd=function(m){
+ const element=originalOnAdd(m);
+ // Leaflet.draw uses leaflet-draw-toolbar-top on some releases, and just
+ // leaflet-draw-toolbar on others. Match both so the tool is reliably shown.
+ const drawBar=element.querySelector('.leaflet-draw-toolbar-top, .leaflet-draw-toolbar');
+ if(drawBar){
+  const holder=document.createElement('div');holder.className='leaflet-draw-toolbar';
+  const link=document.createElement('a');link.href='#';link.className='liminal-exclude-tool';
+  link.textContent='';link.title='Draw exclusion area';link.setAttribute('aria-label','Draw exclusion area');
+  holder.appendChild(link);drawBar.parentNode.insertBefore(holder,drawBar.nextSibling);
+  L.DomEvent.disableClickPropagation(holder);
+  L.DomEvent.on(link,'click',e=>{
+   L.DomEvent.stop(e);
+   if(exclusionDrawer){exclusionDrawer.disable();return}
+   drawingExclusion=true;
+   exclusionDrawer=new L.Draw.Polygon(map,{allowIntersection:false,shapeOptions:{color:'#f2b480',weight:2,dashArray:'6 4',fillOpacity:0}});
+   exclusionDrawer.enable();
+  });
+ }
+ return element;
+};
+map.on(L.Draw.Event.DRAWSTOP,()=>{drawingExclusion=false;exclusionDrawer=null});
+map.on(L.Draw.Event.CREATED,e=>{
+ e.layer._liminalHole=drawingExclusion||e.layer.options?.color==='#f2b480';
+ polygons.addLayer(e.layer);syncPolygons();
+});
+map.on(L.Draw.Event.EDITED,syncPolygons);map.on(L.Draw.Event.DELETED,syncPolygons);
+function page(name){if(name!=='setup'&&exclusionDrawer)exclusionDrawer.disable();if(name!=='setup')setLocationPreview(false);if(name!=='setup'&&document.body.classList.contains('map-fullscreen'))setMapFullscreen(false);document.body.classList.toggle('place-mode',name==='place');document.body.classList.toggle('setup-mode',name==='setup');dockButton.setAttribute('aria-label',name==='setup'?'Hide or show study setup':'Hide or show questionnaire');dockCaption.textContent=panel.classList.contains('dock-collapsed')?'Show '+(name==='setup'?'setup':'questions')+' ↑':'Hide '+(name==='setup'?'setup':'questions')+' ↓';document.querySelectorAll('section').forEach(x=>x.classList.toggle('visible',x.id===name));document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('selected',x.dataset.page===name));if(name==='setup'){map.addLayer(polygons);map.addLayer(areaFill);map.addControl(drawControl)}else{map.removeControl(drawControl);map.removeLayer(polygons);map.removeLayer(areaFill)};updateMapHeight();setTimeout(()=>{map.invalidateSize();if(name==='place'&&placePresented)focusPlace()},80);refresh();}
+document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));
+function ringContains(point,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if(((a[1]>point[1])!==(b[1]>point[1]))&&(point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0]))inside=!inside;}return inside;}
+function inGeometry(point,g){if(g.type==='Polygon')return g.coordinates.length>0&&ringContains(point,g.coordinates[0])&&!g.coordinates.slice(1).some(r=>ringContains(point,r));if(g.type==='MultiPolygon')return g.coordinates.some(p=>inGeometry(point,{type:'Polygon',coordinates:p}));return false;}
+function eligible(lnglat){return state.polygons.features.some(f=>inGeometry(lnglat,f.geometry))}
+function bbox(){const b=polygons.getBounds();return b.isValid()?[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()]:null}
+function randomEligible(b){for(let i=0;i<20000;i++){const x=b[0]+Math.random()*(b[2]-b[0]),y=b[1]+Math.random()*(b[3]-b[1]);if(eligible([x,y]))return [x,y]}return null}
+function offset(point,metres){const ang=Math.random()*Math.PI*2,d=metres*Math.sqrt(Math.random()),lat=point[1]+(d*Math.sin(ang))/111320,lng=point[0]+d*Math.cos(ang)/(111320*Math.cos(point[1]*Math.PI/180));return [lng,lat]}
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
+const prototypeAccess=false;
+let liveMode=!prototypeAccess,livePlace=null,liveStats=null,liveBusy=false;
+function usedToday(person){return state.responses.filter(r=>r.person===person&&r.date===today()).length}
+function loc(){return liveMode?(livePlace?{id:livePlace.assignment_id,A:[livePlace.longitude,livePlace.latitude],B:[livePlace.longitude,livePlace.latitude]}:null):state.pairs[state.queues[state.person]?.[state.cursor[state.person]]]}
+// Start close in, allowing participants to zoom out voluntarily for context.
+function focusPlace(){const p=loc();if(!p||(liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;const [lng,lat]=liveMode?p.A:p[state.person];if(liveMode&&map.hasLayer(aerial2020)){map.removeLayer(aerial2020);aerial.addTo(map)}map.setView([lat,lng],19)}
+let currentV=null,chosen=[],placePresented=false,locationsVisible=false;
+function setLocationPreview(on){
+ locationsVisible=!!on && !!state.pairs.length && !state.studyInitialized;
+ previewLayer.clearLayers();
+ $('viewLocations').textContent=locationsVisible?'Hide locations':'View locations';
+ $('viewLocations').setAttribute('aria-pressed',String(locationsVisible));
+ $('locationPreviewInfo').hidden=!locationsVisible;
+ if(!locationsVisible)return;
+ const bounds=[];
+ for(const pair of state.pairs){
+  const a=[pair.A[1],pair.A[0]],b=[pair.B[1],pair.B[0]];
+  L.polyline([a,b],{color:'#e9d39a',weight:1,opacity:.65,interactive:false}).addTo(previewLayer);
+  L.circleMarker(a,{radius:4,color:'#c8edd8',fillColor:'#4d9b79',fillOpacity:1,weight:1,interactive:false}).addTo(previewLayer);
+  L.circleMarker(b,{radius:4,color:'#ffe0c7',fillColor:'#c97953',fillOpacity:1,weight:1,interactive:false}).addTo(previewLayer);
+  bounds.push(a,b);
+ }
+ if(bounds.length)map.fitBounds(bounds,{padding:[25,25],maxZoom:15});
+}
+$('viewLocations').onclick=()=>{if(state.studyInitialized){info('setupStatus','Location previews are unavailable once the real study has been initialized.');return}if(!state.pairs.length){info('setupStatus','Generate locations first to preview the paired sample.');return}setLocationPreview(!locationsVisible)};
+
+const panel=$('bottomPanel'),dockButton=$('dockHandle'),dockCaption=$('dockCaption');
+function updateMapHeight(){const tabs=document.querySelector('.tabs');document.body.style.setProperty('--top-height',(document.querySelector('header').offsetHeight+document.querySelector('#authPanel').offsetHeight+tabs.offsetHeight)+'px');setTimeout(()=>map.invalidateSize(),80)}
+function setDockCollapsed(collapsed){panel.classList.toggle('dock-collapsed',collapsed);dockButton.setAttribute('aria-expanded',String(!collapsed));const isSetup=document.body.classList.contains('setup-mode');dockCaption.textContent=collapsed?'Show '+(isSetup?'setup':'questions')+' ↑':'Hide '+(isSetup?'setup':'questions')+' ↓';setTimeout(()=>map.invalidateSize(),250)}
+dockButton.addEventListener('click',()=>{if(dockButton.dataset.swiped)return;setDockCollapsed(!panel.classList.contains('dock-collapsed'))});
+let gestureY=null;
+dockButton.addEventListener('touchstart',e=>{gestureY=e.touches[0].clientY},{passive:true});
+dockButton.addEventListener('touchend',e=>{if(gestureY===null)return;const diff=e.changedTouches[0].clientY-gestureY;gestureY=null;if(Math.abs(diff)>32){setDockCollapsed(diff>0);dockButton.dataset.swiped='yes';setTimeout(()=>delete dockButton.dataset.swiped,80)}},{passive:true});
+
+$('present').onclick=()=>{if(!loc()||(liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;if(liveMode&&liveBusy)return;placePresented=true;setDockCollapsed(true);resetForm();info('feedback','');refresh();focusPlace()};
+function resetForm(){currentV=null;chosen=[];document.querySelectorAll('[data-v]').forEach(b=>b.classList.remove('active'));$('details').replaceChildren();$('strengthWrap').hidden=true;$('strength').value='';$('note').value=''}
+function refresh(){
+ info('identity',liveMode?'Shared study':state.person==='A'?'Participant A':'Participant B');
+ $('person').value=state.person;
+ let n=liveMode?Number(liveStats?.completed_today||0):usedToday(state.person),p=loc();
+ $('question').hidden=!placePresented||!p||n>=DAYMAX;
+ $('invitation').hidden=placePresented||!p||n>=DAYMAX;
+ $('save').disabled=liveBusy;$('present').disabled=liveMode&&(!liveStats?.started||!livePlace||n>=DAYMAX||liveBusy);
+ $('prototypeTools').hidden=!prototypeAccess;
+ $('prototypeSetupTab').hidden=!prototypeAccess;
+ $('modeToggle').textContent=liveMode?'Open local test workspace':'Return to study';
+ $('liveReload').hidden=!liveMode || !liveStats?.started;
+ $('liveBanner').hidden=!liveMode;
+ if(liveMode){
+  info('liveBanner',liveStats?.started?'Observations are private and remain hidden until the study is complete.':'The study is not yet available.');
+  info('placeStatus',!liveStats?'Sign in to load the study, then refresh assignments.':!liveStats.started?'The study has not started yet.':n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 recorded today.':'No more assigned places.');
+  info('stats',(liveStats?.completed||0)+' shared-study impressions recorded. '+n+' of 10 today. Contents remain hidden.');
+ }else{
+  info('placeStatus',n>=DAYMAX?'Daily limit reached (10/10). Return tomorrow.':p?'Ready for your next place. '+n+'/10 impressions recorded today.':'No pending locations. Draw eligible areas and generate the study in Setup.');
+  info('stats',state.responses.filter(r=>r.person===state.person).length+' impressions recorded on this device. '+n+' of 10 today. No results displayed.');
+ }
+ dotLayer.clearLayers();
+ if(p&&placePresented&&n<DAYMAX){const point=liveMode?p.A:p[state.person];L.circleMarker([point[1],point[0]],{radius:12,color:'#e7ead2',weight:3,fillColor:'#688a69',fillOpacity:.35}).addTo(dotLayer)}
+}
+async function loadLive(){
+ if(!liveMode)return;
+ placePresented=false;livePlace=null;liveStats=null;resetForm();refresh();
+ if(!window.liminalClient){info('feedback','Authentication has not loaded; refresh the page.');return}
+ liveBusy=true;refresh();
+ try{
+  const {data:{user},error:authError}=await window.liminalClient.auth.getUser();
+  if(authError||!user)throw Error('Sign in using Account login first.');
+  const {data,error}=await window.liminalClient.rpc('next_liminal_place');
+  if(error)throw error;
+  liveStats=(data||[])[0]||null;
+  if(liveStats?.started&&liveStats.assignment_id)livePlace=liveStats;
+  info('feedback',liveStats?.started?'':'The study has not started yet.');
+ }catch(e){info('feedback','Could not load shared study: '+e.message)}
+ finally{liveBusy=false;refresh()}
+}
+$('modeToggle').onclick=()=>{if(!prototypeAccess)return;liveMode=!liveMode;placePresented=false;setDockCollapsed(false);resetForm();if(liveMode)loadLive();else{livePlace=null;liveStats=null;info('feedback','Local prototype restored. Test responses remain on this device.');refresh()}};
+$('liveReload').onclick=loadLive;
+window.addEventListener('liminal-auth',()=>{if(liveMode)loadLive()});
+// This link is entirely absent from the participant's visible UI.
+// Supabase verifies administrator status on the server; this is only a display hint.
+let adminCheckVersion=0;
+window.addEventListener('liminal-auth',async event=>{
+ const link=document.getElementById('adminToolsLink'),version=++adminCheckVersion;
+ link.hidden=true;
+ if(!event.detail?.user||!window.liminalClient)return;
+ try{
+  const {data,error}=await window.liminalClient.rpc('liminal_admin_auto_status');
+  if(version===adminCheckVersion&&!error&&data?.studyId)link.hidden=false;
+ }catch(e){/* Optional admin capability is unavailable in the current live schema. */}
+});
+
+document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{currentV=b.dataset.v;chosen=[];document.querySelectorAll('[data-v]').forEach(x=>x.classList.toggle('active',x===b));$('details').replaceChildren();let title=document.createElement('p');title.textContent='Choose one or more descriptions:';$('details').append(title);categories[currentV].forEach(c=>{let x=document.createElement('button');x.textContent=c;x.onclick=()=>{if(chosen.includes(c))chosen=chosen.filter(z=>z!==c);else chosen.push(c);x.classList.toggle('chosen',chosen.includes(c))};$('details').append(x)});$('strengthWrap').hidden=currentV==='neutral';});
+
+$('save').onclick=async()=>{
+ const p=loc(),v=currentV;if(!p||liveBusy)return;
+ if((liveMode?Number(liveStats?.completed_today||0):usedToday(state.person))>=DAYMAX)return;
+ if(!v||!chosen.length||v!=='neutral'&&!$('strength').value){info('feedback','Please select an impression, a description, and strength when applicable.');return}
+ if(liveMode){
+  liveBusy=true;refresh();
+  try{
+   const {error}=await window.liminalClient.rpc('submit_impression',{
+    p_assignment_id:livePlace.assignment_id,p_valence:v,p_descriptions:[...chosen],
+    p_strength:v==='neutral'?null:+$('strength').value,p_note:$('note').value.trim()
+   });
+   if(error)throw error;
+   placePresented=false;resetForm();
+   await loadLive();
+   info('feedback','Secure impression recorded. It is hidden until the study is revealed.');
+  }catch(e){info('feedback','Not saved: '+e.message)}
+  finally{liveBusy=false;refresh()}
+  return;
+ }
+ state.responses.push({pairId:p.id,person:state.person,coordinate:p[state.person],valence:v,descriptions:[...chosen],strength:v==='neutral'?null:+$('strength').value,note:$('note').value.trim(),date:today(),time:new Date().toISOString(),sampling:'broad'});
+ state.cursor[state.person]++;saveState();placePresented=false;setDockCollapsed(false);resetForm();
+ info('feedback','Prototype impression recorded locally. Choose “Present a place” for another.');refresh();
+};
+$('skip').onclick=()=>{info('feedback','You can return to this place later. No impression recorded.')};
+$('person').onchange=e=>{state.person=e.target.value;placePresented=false;saveState();resetForm();refresh()};
+$('generate').onclick=()=>{
+ const b=bbox(),count=Math.max(2,Math.min(2000,+$('pairs').value||100)),max=Math.max(0,Math.min(1000,+$('separation').value||0))*FT;
+ if(!b){info('setupStatus','Draw at least one eligible polygon first.');return}
+ if(state.responses.length&&!confirm('Regenerating removes existing prototype responses. Continue?'))return;
+ try{
+  const generated=LiminalSampling.generate({count,bounds:b,eligible,maxSeparationMeters:max,report:x=>info('setupStatus','Selected '+x.selected+' spatially balanced pairs from '+x.candidateCount+' candidate sites.')});
+  setLocationPreview(false);state.pairs=generated;state.responses=[];
+  state.queues={A:shuffle(generated.map((_,i)=>i)),B:shuffle(generated.map((_,i)=>i))};
+  state.cursor={A:0,B:0};placePresented=false;saveState();page('place');
+ }catch(err){info('setupStatus',err.message)}
+};
+function downloadStudy(name){
+ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('joinAreas').onclick=()=>{
+ if(!window.turf){info('setupStatus','The polygon processing library did not load. Check the connection and refresh.');return}
+ const original=state.polygons?.features||[];
+ if(!original.length){info('setupStatus','Draw or import some eligible areas first.');return}
+ if(!confirm('Join overlapping/touching eligible areas and simplify their outlines? A backup will be downloaded first. You can undo by importing that backup.'))return;
+ try{
+  let merged=null;
+  for(const f of original){
+   if(!f.geometry||!['Polygon','MultiPolygon'].includes(f.geometry.type))continue;
+   let cleaned=turf.cleanCoords(f);
+   if(!merged){merged=cleaned;continue}
+   try{merged=turf.union(merged,cleaned)}catch(err){
+    // Some drawings can have invalid or nearly intersecting edges.
+    // Buffering by zero repairs many self-intersections without expanding coverage.
+    let a=turf.buffer(merged,0,{units:'meters'}),b=turf.buffer(cleaned,0,{units:'meters'});
+    merged=turf.union(a,b);
+   }
+  }
+  if(!merged)throw Error('No polygon geometry found.');
+  const beforeArea=turf.area(merged);
+  let simplified=turf.simplify(merged,{tolerance:0.00001,highQuality:true,mutate:false});
+  let afterArea=turf.area(simplified);
+  // Avoid visibly modifying the sampled region if simplification causes unusual loss.
+  if(beforeArea>0&&Math.abs(afterArea-beforeArea)/beforeArea>.01){simplified=merged;afterArea=beforeArea}
+  const geometry=simplified.geometry;
+  const components=geometry.type==='Polygon'?[geometry.coordinates]:geometry.type==='MultiPolygon'?geometry.coordinates:[];
+  const next={type:'FeatureCollection',features:components.map(coordinates=>({type:'Feature',properties:{},geometry:{type:'Polygon',coordinates}}))};
+  if(!next.features.length)throw Error('Union did not produce editable polygons.');
+  downloadStudy('liminalcreek-before-join-backup.json');
+  state.polygons=next;saveState();renderPolygons();
+  info('setupStatus',original.length+' drawn shapes joined into '+next.features.length+' editable area(s); union area approximately '+(beforeArea/1e6).toFixed(2)+' km². Original backup downloaded. Existing location pairs have not been changed.');
+ }catch(err){info('setupStatus','Could not join areas: '+err.message+'. Your original polygons are unchanged.')}
+};
+$('export').onclick=()=>{downloadStudy('liminalcreek-prototype.json')};
+$('newProject').onclick=()=>{
+ if(!confirm('Start a completely blank local prototype? This clears imported/drawn areas, locations and test impressions from this browser. A backup will be downloaded first.'))return;
+ downloadStudy('liminalcreek-before-reset-backup.json');
+ setLocationPreview(false);
+ state={polygons:{type:'FeatureCollection',features:[]},pairs:[],responses:[],queues:{A:[],B:[]},cursor:{A:0,B:0},person:'A'};
+ placePresented=false;saveState();renderPolygons();refresh();
+ $('viewLocations').disabled=false;
+ info('setupStatus','Blank project ready. Your previous project was downloaded as a JSON backup; import it to restore your areas.');
+};
+$('import').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const obj=JSON.parse(await e.target.files[0].text());if(obj.polygons){setLocationPreview(false);state=obj;placePresented=false;state.responses||=[];state.queues||={A:[],B:[]};state.cursor||={A:0,B:0};state.person||='A'}else if(obj.type==='FeatureCollection'){state.polygons=obj}else throw Error('Expected GeoJSON FeatureCollection or study export');saveState();renderPolygons();refresh();$('viewLocations').disabled=!!state.studyInitialized;info('setupStatus','Imported successfully.')}catch(err){info('setupStatus','Import failed: '+err.message)}e.target.value=''};
+/* no service worker registration in this isolated staging preview */document.body.classList.add('place-mode');map.removeLayer(polygons);map.removeLayer(areaFill);$('viewLocations').disabled=!!state.studyInitialized;updateMapHeight();window.addEventListener('resize',updateMapHeight);refresh();if(liveMode&&window.liminalClient)loadLive();document.querySelector('#authPanel').addEventListener('toggle',updateMapHeight);
+})();
+</script></body></html>
