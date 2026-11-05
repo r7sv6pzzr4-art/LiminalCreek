@@ -8,10 +8,10 @@
 
 The existing participant application retains its appearance, questions, daily limit, and `next_liminal_place` / `submit_impression` RPCs. A link labelled **Admin** is revealed in the app header only after a successful server-side administrator check. The standalone `admin-adaptive.html` screen is otherwise inaccessible to unauthenticated users or non-admin study members.
 
-Once **both participants have responded to every currently assigned location**, the administrator selects **20** or **40** new paired locations and confirms the action. The server then:
+When at least 100 original pairs have been assigned to both participants, the administrator can queue **10, 20, 30, or 40** new pairs before either participant finishes their current set. The admin selects a **50% or 75% adaptive** sampling preset and confirms. The system permits one upcoming unstarted batch at a time; a second cannot be stacked until at least one participant begins the queued batch. The server then:
 1. Rechecks the authenticated JWT and study administrator role.
 2. Reads existing paired assignment coordinates and available valence/strength observations privately. It does not read comments, description text, or email addresses.
-3. Generates 20-pair chunks with the shared engine, using 50% response-informed selection during the first 40 additional pairs, then 75% thereafter. A 40-pair choice uses the first 20 proposals to improve coverage before generating its next 20; it does not invent responses that have not been collected.
+3. Generates the chosen number of pairs in one batch with the selected sampling ratio. Defaults remain 50% adaptive for the first 40 additional pairs, then 75% adaptive, but the administrator can override the preset. The engine uses **all sites already assigned** to avoid repeated coverage, and **only responses actually submitted** as adaptive evidence; pending responses are not imputed as neutral.
 4. Checks the eligible polygons (including holes), paired separation, counts and identities.
 5. Creates independent presentation orders and invokes the **service-role-only** commit RPC.
 6. In one transaction, freezes the exact generated candidate data and appends both participant queues. Existing assignments and responses are not updated.
@@ -22,7 +22,8 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 ## Files
 
 - `index.html`: admin-link only; participant UI and submission workflow otherwise unchanged
-- `admin-adaptive.html`: administrator status and 20/40 activation controls
+- `admin-adaptive.html`: administrator current-set progress, 10/20/30/40 count dropdown, 50/75 adaptive preset dropdown, and append controls
+- `research/admin-offline-preview.html`: self-contained offline visual preview with synthetic 116/120 and 119/120 progress; no database connection
 - `admin-adaptive-config.js`: deliberately blank connection settings on this development branch; the administrator page is **disabled** until explicitly set to an isolated staging project
 - `supabase/functions/liminal-auto-activate/index.ts`: private Edge Function, JWT and administrator checks, generation, retry check
 - `supabase/functions/_shared/adaptive-engine.mjs`: shared adaptive selection engine (not the personal hotspot engine)
@@ -35,7 +36,7 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 
 1. Pure JavaScript synthetic sampling tests, including parity of the private Edge engine with the studied shared engine.
 2. Deno type check of the Edge Function (no Supabase keys).
-3. Disposable PostgreSQL tests for administrator authentication, service-only coordinates commit, initial 20 and later 40 pair activation, expected phase percentages, sequential assignments, idempotence and preservation of original responses and assignments.
+3. Disposable PostgreSQL tests for administrator authentication, service-only coordinates commit, proactive activation from 88/100 and 100/100 original completions and later 116/120 and 119/120, selected preset ratios, independent sequence permutations, idempotence, and preservation of original responses and assignments.
 4. Static administrator page tests and checks that participant collection functions are not replaced.
 
 **These do not constitute a full Supabase integration test.**
@@ -48,7 +49,7 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 - Apply a fresh copy of the relevant study schema, existing live collection API, then the proposed adaptive draft **to staging only**.
 - Use two synthetic test identities (one designated admin). Insert 100 synthetic matched pairs and mock responses through controlled fixtures.
 - Deploy the Edge Function only to staging, with staging-specific keys. Verify administrator status is denied to non-admin, public/anonymous clients cannot read responses, and both participant apps remain blinded.
-- Verify 20 and 40 actions end-to-end through the real browser and Supabase client, including role claims, CORS, `auth.role()`, and response/assignment counts.
+- Verify 10, 20, 30, and 40 pair actions end-to-end through the real browser and Supabase client, with both selectable adaptive ratios and **unfinished** current sets, including role claims, CORS, `auth.role()`, and response/assignment counts.
 - Simulate network timeouts, concurrent requests, duplicate request IDs and refreshed admin sessions. Confirm no double append.
 - Verify the original 200 assignment records and 200 synthetic responses are **byte-for-byte unchanged**, including order, identifiers and notes.
 - Confirm each user's locations follow independent orders and a user cannot retrieve a matched partner's coordinates or the other person's answers.
@@ -62,7 +63,7 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 2. Pause while assessing the latest development and deployed versions to ensure no unrelated participant UI change is being merged.
 3. Apply only the reviewed additive migration and Edge Function, then the reviewed admin-only app update, after explicit go-ahead. The production admin connection settings must be enabled as part of that separate, explicitly reviewed release; the development branch's default stays disconnected.
 4. Test administrator status before any activation. Record production counts and hashes before and after.
-5. **Do not activate any new locations automatically during deployment.** The administrator must deliberately choose 20 or 40 after both participants finish the currently assigned locations.
+5. **Do not activate any new locations automatically during deployment.** The administrator deliberately selects 10/20/30/40 and a preset ratio. This can happen before current assignments are complete, but new locations are appended after them. No individual location approval is required.
 6. Never reveal hidden participant responses, comments or partner locations before the planned study conclusion.
 
 ## Privacy and failure behavior
