@@ -8,6 +8,8 @@ h1,h2{font-family:Georgia,serif}h1{font-size:1.65rem}
 .panel{padding:20px;border:1px solid #4e705c;border-radius:15px;background:#203b33;margin:15px 0}
 button{font:inherit;border:1px solid #789387;border-radius:10px;background:#31574a;color:white;padding:12px;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
+input{font:inherit;width:100%;padding:11px;color:#e9ede5;background:#142d24;border:1px solid #789387;border-radius:10px}
+.authActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
 select{width:100%;padding:11px;background:#142d24;color:#e9ede5;border:1px solid #789387;border-radius:10px;font:inherit}
 label{display:block;margin:12px 0 7px;font-weight:600}
 .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -27,8 +29,18 @@ a{color:#d0e9d2}button#refresh{padding:7px 12px}
 <body><main>
 <h1>LiminalCreek · Study administration</h1>
 <p class="small">Private control for the two-participant shared study. The participant app is unchanged.</p>
-<p><a href="./index.html">Return to LiminalCreek</a></p>
-<section class="panel"><h2>Authorization</h2><p id="message" aria-live="polite">Checking your signed-in account…</p><button id="refresh">Refresh status</button></section>
+<p class="small">STAGING ONLY · Supabase project <strong>mrelwvpixalfycfdarjf</strong>. Do not open the live participant app for this rehearsal.</p>
+<section class="panel" id="stagingSignIn">
+<h2>Staging administrator sign-in</h2>
+<p class="small">Enter the <strong>publishable</strong> API key from the STAGING project's Settings → API Keys. It normally starts with <code>sb_publishable_</code>. Never enter a service-role or secret key here.</p>
+<label for="stagingPublishableKey">Staging publishable API key</label>
+<input id="stagingPublishableKey" type="text" spellcheck="false" autocomplete="off" placeholder="sb_publishable_…" />
+<label for="stagingPassword">Password for staging-admin@example.invalid</label>
+<input id="stagingPassword" type="password" autocomplete="current-password" placeholder="Staging test password" />
+<div class="authActions"><button id="stagingSignInButton" type="button">Connect and sign in</button><button id="stagingSignOutButton" type="button" hidden>Sign out</button></div>
+<p class="small">Credentials stay in your browser and are sent only to the isolated staging Supabase project. No production credentials are needed.</p>
+</section>
+<section class="panel"><h2>Authorization</h2><p id="message" aria-live="polite">Sign in to staging to see study status.</p><button id="refresh">Refresh status</button></section>
 <div id="adminArea" hidden>
 <section class="panel"><h2>Current shared-study progress</h2>
 <dl>
@@ -61,10 +73,52 @@ a{color:#d0e9d2}button#refresh{padding:7px 12px}
 <script type="module">
 import {ADMIN_SUPABASE_URL,ADMIN_SUPABASE_PUBLISHABLE_KEY} from './admin-adaptive-config.js';
 const $=id=>document.getElementById(id);
-const client=ADMIN_SUPABASE_URL&&ADMIN_SUPABASE_PUBLISHABLE_KEY
- ? globalThis.supabase.createClient(ADMIN_SUPABASE_URL,ADMIN_SUPABASE_PUBLISHABLE_KEY,{
+// Hard fail closed unless explicitly on the isolated staging project.
+const stagingUrl='https://mrelwvpixalfycfdarjf.supabase.co';
+const stagingOnly=ADMIN_SUPABASE_URL===stagingUrl;
+const keyName='liminal-staging-publishable-key-v1';
+let client=null;
+function connect(key){
+ if(!stagingOnly)throw Error('This administrator preview is restricted to the staging project');
+ if(!/^sb_publishable_[A-Za-z0-9_-]+$/.test(key))
+  throw Error('Use only the staging publishable key (sb_publishable_...), never a secret key');
+ if(!globalThis.supabase?.createClient)throw Error('Supabase browser library did not load');
+ client=globalThis.supabase.createClient(stagingUrl,key,{
   auth:{persistSession:true,autoRefreshToken:true}
- }):null;
+ });
+ return client;
+}
+async function signIn(){
+ const key=$('stagingPublishableKey').value.trim();
+ const password=$('stagingPassword').value;
+ if(!password){message('Enter the password for the synthetic staging administrator account.');return}
+ $('stagingSignInButton').disabled=true;
+ try{
+  const staging=connect(key);
+  const {error}=await staging.auth.signInWithPassword({
+    email:'staging-admin@example.invalid',password
+  });
+  if(error)throw Error(error.message);
+  sessionStorage.setItem(keyName,key);
+  $('stagingPassword').value='';
+  $('stagingSignInButton').hidden=true;
+  $('stagingSignOutButton').hidden=false;
+  await load();
+ }catch(e){message('Staging sign-in failed: '+(e instanceof Error?e.message:String(e)))}
+ finally{$('stagingSignInButton').disabled=false}
+}
+async function signOut(){
+ if(client)await client.auth.signOut();
+ client=null;
+ sessionStorage.removeItem(keyName);
+ clearPending();
+ ready=false;lastStatus=null;
+ $('adminArea').hidden=true;
+ $('stagingSignInButton').hidden=false;
+ $('stagingSignOutButton').hidden=true;
+ message('Signed out from staging.');
+ buttons();
+}
 let ready=false,busy=false,selectionChanged=false,lastStatus=null;
 const pendingKey='liminal-admin-activation-request-v2';
 function readPending(){
@@ -183,6 +237,19 @@ $('pairCount').addEventListener('change',()=>{selectionChanged=true});
 $('adaptivePercent').addEventListener('change',()=>{selectionChanged=true});
 $('refresh').onclick=load;
 $('activate').onclick=activate;
-if(client)load();
-else message('Administrator controls are disabled on this development branch. Connect only an isolated staging database for testing.');
+$('stagingSignInButton').onclick=signIn;
+$('stagingSignOutButton').onclick=signOut;
+$('refresh').disabled=true;
+try{
+ const savedKey=ADMIN_SUPABASE_PUBLISHABLE_KEY||sessionStorage.getItem(keyName)||'';
+ if(savedKey&&stagingOnly){
+  $('stagingPublishableKey').value=savedKey;
+  connect(savedKey);
+  client.auth.getUser().then(({data:{user}})=>{
+   if(user){$('stagingSignInButton').hidden=true;$('stagingSignOutButton').hidden=false;load()}
+   else{message('Sign in using the synthetic staging administrator account.');$('refresh').disabled=true}
+  }).catch(()=>message('Please sign in to staging.'));
+ }else message('Use the staging publishable key and synthetic admin password to connect.');
+}catch(e){message(e instanceof Error?e.message:String(e))}
+
 </script></body></html>
