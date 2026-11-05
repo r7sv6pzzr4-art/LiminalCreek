@@ -7,9 +7,16 @@ const server=fs.readFileSync('supabase/functions/liminal-auto-activate/index.ts'
 const config=fs.readFileSync('admin-adaptive-config.js','utf8');
 const sql=fs.readFileSync('research/drafts/auto-activation.DO-NOT-RUN.sql','utf8');
 
-test('administrator page has 20 and 40 options, with recoverable requests',()=>{
- assert.match(page,/id="activate20"/);
- assert.match(page,/id="activate40"/);
+test('administrator page has 10–40 dropdown and ratio presets with recoverable requests',()=>{
+ assert.match(page,/id="pairCount"/);
+ assert.match(page,/id="adaptivePercent"/);
+ assert.match(page,/value="10"/);
+ assert.match(page,/value="20"/);
+ assert.match(page,/value="30"/);
+ assert.match(page,/value="40"/);
+ assert.match(page,/value="50"/);
+ assert.match(page,/value="75"/);
+ assert.match(page,/id="activate"/);
  assert.match(page,/sessionStorage\.setItem\(pendingKey/);
  assert.match(page,/action:'check'/);
  assert.match(page,/window\.confirm\(/);
