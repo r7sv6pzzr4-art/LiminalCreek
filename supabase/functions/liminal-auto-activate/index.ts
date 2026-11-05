@@ -183,7 +183,8 @@ Deno.serve(async req=>{
   const orderA=randomizedOrder(requested);
   const orderB=randomizedOrder(requested);
   requestedRows.forEach((r,i)=>{r.orderA=orderA[i];r.orderB=orderB[i]});
-  const {data:result,error:commitError}=await caller.rpc("liminal_admin_commit_auto_batch",{
+  const {data:result,error:commitError}=await admin.rpc("liminal_admin_commit_auto_batch",{
+   p_actor_user_id:identity.user.id,
    p_request_id:requestId,
    p_expected_assignment_rows:assignments.length,
    p_expected_response_rows:responses.length,
