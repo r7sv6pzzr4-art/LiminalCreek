@@ -10,7 +10,7 @@ function render(session){
  const user=session?.user||null;
  $('authSend').hidden=!!user;
  $('authSignOut').hidden=!user;
- $('authIdentity').textContent=user?'STAGING · '+user.email:'Not signed in';
+ $('authIdentity').textContent=user?'Signed in: STAGING · '+user.email:'Not signed in';
  status(user?'Connected to the synthetic staging study.':'Use a synthetic staging account.');
  window.dispatchEvent(new CustomEvent('liminal-auth',{detail:{user}}));
 }
