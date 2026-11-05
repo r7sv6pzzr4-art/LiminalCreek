@@ -82,7 +82,7 @@ BEGIN
  THEN RAISE EXCEPTION 'Expected eligible partly completed original study'; END IF;
  IF (stat->>'responseRows')::integer<>188 OR (stat->'participants'->0->>'completed')::integer<>88
  THEN RAISE EXCEPTION 'Readiness must use the 188 submitted responses'; END IF;
- IF has_function_privilege('authenticated','public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb)','EXECUTE')
+ IF has_function_privilege('authenticated','public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,smallint,jsonb)','EXECUTE')
  THEN RAISE EXCEPTION 'Client may execute coordinate insertion RPC'; END IF;
 END $$;
 RESET ROLE;
