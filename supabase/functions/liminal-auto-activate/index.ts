@@ -101,7 +101,7 @@ Deno.serve(async req=>{
   if(payload?.action!=="activate"&&payload?.action!=="check")
    return fail("Unknown action",400);
   const requestId=String(payload.requestId||"");
-  if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestId))
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))
    return fail("Invalid activation ID",400);
   // A prior committed request must be recognized even if today's assignment
   // queue is no longer ready. This prevents duplicate creation on lost replies.
