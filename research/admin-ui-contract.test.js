@@ -56,6 +56,6 @@ test('development administrator screen is disconnected from production by defaul
  assert.match(page,/\.\/admin-adaptive-config\.js/);
  assert.doesNotMatch(page,/\.\/backend\/supabase-config\.js/);
  assert.match(page,/if\(!client\)throw Error/);
- assert.match(config,/ADMIN_SUPABASE_URL\s*=\s*''/);
+ assert.match(config,/ADMIN_SUPABASE_URL\s*=\s*'https:\/\/mrelwvpixalfycfdarjf\.supabase\.co'/);
  assert.match(config,/ADMIN_SUPABASE_PUBLISHABLE_KEY\s*=\s*''/);
 });
