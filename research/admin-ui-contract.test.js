@@ -3,6 +3,8 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const page=fs.readFileSync('admin-adaptive.html','utf8');
 const participant=fs.readFileSync('index.html','utf8');
+const stagingParticipant=fs.readFileSync('participant-staging.html','utf8');
+const ownProgressSQL=fs.readFileSync('research/staging/participant-progress.STAGING-ONLY.sql','utf8');
 const server=fs.readFileSync('supabase/functions/liminal-auto-activate/index.ts','utf8');
 const config=fs.readFileSync('admin-adaptive-config.js','utf8');
 const sql=fs.readFileSync('research/drafts/auto-activation.DO-NOT-RUN.sql','utf8');
@@ -58,4 +60,27 @@ test('development administrator screen is disconnected from production by defaul
  assert.match(page,/if\(!client\)throw Error/);
  assert.match(config,/ADMIN_SUPABASE_URL\s*=\s*'https:\/\/mrelwvpixalfycfdarjf\.supabase\.co'/);
  assert.match(config,/ADMIN_SUPABASE_PUBLISHABLE_KEY\s*=\s*''/);
+});
+
+
+test('participants see only their own assigned total and current set',()=>{
+ assert.match(participant,/rpc\('liminal_my_progress'\)/);
+ assert.match(stagingParticipant,/rpc\('liminal_my_progress'\)/);
+ assert.match(participant,/assigned locations completed/);
+ assert.match(stagingParticipant,/Current set:/);
+ assert.match(ownProgressSQL,/v_uid uuid:=auth.uid\(\)/);
+ assert.match(ownProgressSQL,/a.user_id=v_uid/);
+ assert.match(ownProgressSQL,/r.user_id=v_uid/);
+ assert.match(ownProgressSQL,/TO authenticated;/);
+ assert.match(ownProgressSQL,/FROM PUBLIC,anon;/);
+ assert.doesNotMatch(ownProgressSQL,/p.user_id<>v_uid/);
+});
+test('staging participant preview never imports live project authentication',()=>{
+ const stageAuth=fs.readFileSync('auth-staging.js','utf8');
+ assert.match(stagingParticipant,/auth-staging.js/);
+ assert.match(stageAuth,/mrelwvpixalfycfdarjf.supabase.co/);
+ assert.doesNotMatch(stagingParticipant,/\.\/auth.js\?/);
+ assert.doesNotMatch(stageAuth,/fwdsoluixqeycapncecl/);
+ assert.doesNotMatch(stagingParticipant,/navigator.serviceWorker.register/);
+ assert.match(stagingParticipant,/ARTIFICIAL RECTANGULAR STUDY AREA/);
 });
