@@ -130,7 +130,7 @@ INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
  FROM public.assignments a WHERE a.sequence_no BETWEEN 101 AND 120;
 SET ROLE authenticated;
 SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-DO $
+DO $$
 DECLARE manifest jsonb; result jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
@@ -145,9 +145,9 @@ BEGIN
   'synthetic-second-long-seed',manifest);
  IF (result->>'addedPairs')::integer<>40 OR (result->>'firstSequence')::integer<>121
  THEN RAISE EXCEPTION '40-pair activation failed'; END IF;
-END $;
+END $$;
 RESET ROLE;
-DO $
+DO $$
 BEGIN
  IF (SELECT count(*) FROM public.assignments)<>320 OR
     (SELECT count(*) FROM public.responses)<>240 OR
@@ -160,6 +160,6 @@ BEGIN
    SELECT md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id))
    FROM public.assignments a WHERE a.sequence_no<=100)
  THEN RAISE EXCEPTION 'Original assignments modified after second release'; END IF;
-END $;
+END $$;
 SELECT 'PASS: role restrictions, 20 and 40 matched-pair activations, idempotence, originals unchanged' AS result;
 
