@@ -9,6 +9,7 @@ on:
       - 'supabase/functions/liminal-auto-activate/index.ts'
       - 'supabase/functions/_shared/adaptive-engine.mjs'
       - 'research/drafts/auto-activation.DO-NOT-RUN.sql'
+      - 'research/staging/hosted-staging-bootstrap.STAGING-ONLY.sql'
       - '.github/workflows/disposable-supabase-staging.yml'
 
 jobs:
@@ -25,20 +26,14 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Assemble disposable local-only migration
+      - name: Install exact guarded hosted-staging SQL in disposable test database
         shell: bash
         run: |
           set -euo pipefail
-          test -f supabase/config.toml
           test ! -f supabase/.branches/_current_branch
           mkdir -p supabase/migrations
-          {
-            cat backend/schema.sql
-            echo
-            cat backend/02_live_study_api.sql
-            echo
-            cat research/drafts/auto-activation.DO-NOT-RUN.sql
-          } > supabase/migrations/20261104000000_local_only.sql
+          cp research/staging/hosted-staging-bootstrap.STAGING-ONLY.sql \
+             supabase/migrations/20261104000000_local_only.sql
       - name: Start actual Supabase Auth, database, PostgREST and Edge runtime
         shell: bash
         run: |
