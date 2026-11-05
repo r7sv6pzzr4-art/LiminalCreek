@@ -132,7 +132,7 @@ Deno.serve(async req=>{
   const originalCounts={A:0,B:0};
   for(const a of assignments){
    const role=a.user_id===members[0]?"A":a.user_id===members[1]?"B":null;
-   requireCheck(role&&userSet.has(a.user_id),"Unknown assignment owner");
+   if(role===null||!userSet.has(a.user_id))throw Error("Unknown assignment owner");
    let p=paired.get(a.pair_id);
    if(!p){p={};paired.set(a.pair_id,p)}
    requireCheck(!p[role],"Duplicate paired assignment");
