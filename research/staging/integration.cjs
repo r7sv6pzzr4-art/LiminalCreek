@@ -84,7 +84,8 @@ async function run(){
  assert.equal(baseline.assignedRows,200);
  assert.equal(baseline.responseRows,188);
  assert.equal(baseline.canActivate,true);
- assert.deepEqual(baseline.participants.map(p=>p.completed),[88,100]);
+ assert.equal(baseline.participants.find(p=>p.isYou)?.completed,88);
+ assert.equal(baseline.participants.find(p=>!p.isYou)?.completed,100);
  console.log('STAGING: 88/100 + 100/100 status and role checks passed');
  const original=ok(await service.from('assignments').select('*').eq('study_id',study.id)
    .lte('sequence_no',100).order('id',{ascending:true}),'original snapshot');
@@ -116,7 +117,8 @@ async function run(){
  const progress=ok(await adminClient.rpc('liminal_admin_auto_status'),'partial progress');
  assert.equal(progress.responseRows,235);
  assert.equal(progress.canActivate,true);
- assert.deepEqual(progress.participants.map(p=>p.currentSetCompleted),[16,19]);
+ assert.equal(progress.participants.find(p=>p.isYou)?.currentSetCompleted,16);
+ assert.equal(progress.participants.find(p=>!p.isYou)?.currentSetCompleted,19);
  const request2=uid();
  const second=await checkFunction(adminClient,{action:'activate',count:30,adaptivePercent:75,requestId:request2});
  assert.equal(second.addedPairs,30);
