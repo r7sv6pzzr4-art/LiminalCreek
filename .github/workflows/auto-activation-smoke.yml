@@ -25,4 +25,4 @@ jobs:
             if docker exec liminal-activation-test pg_isready -U postgres -q; then break; fi
             sleep 1
           done
-          docker exec -i liminal-activation-test psql -U postgres -d postgres             -v ON_ERROR_STOP=1 -X -f /dev/stdin < research/tests/auto-activation-smoke.sql
+          docker exec liminal-activation-test psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 -f /app/research/tests/auto-activation-smoke.sql
