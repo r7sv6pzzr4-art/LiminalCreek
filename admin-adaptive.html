@@ -32,10 +32,10 @@ a{color:#d0e9d2}button#refresh{padding:7px 12px}
 <div id="adminArea" hidden>
 <section class="panel"><h2>Current shared-study progress</h2>
 <dl>
-<dt>Participant A — current set</dt><dd id="currentA">—</dd>
-<dt>Participant B — current set</dt><dd id="currentB">—</dd>
-<dt>Participant A — total completed / assigned</dt><dd id="progressA">—</dd>
-<dt>Participant B — total completed / assigned</dt><dd id="progressB">—</dd>
+<dt id="labelCurrentA">Participant A — current set</dt><dd id="currentA">—</dd>
+<dt id="labelCurrentB">Participant B — current set</dt><dd id="currentB">—</dd>
+<dt id="labelTotalA">Participant A — total completed / assigned</dt><dd id="progressA">—</dd>
+<dt id="labelTotalB">Participant B — total completed / assigned</dt><dd id="progressB">—</dd>
 <dt>Additional matched pairs already assigned</dt><dd id="existing">—</dd>
 <dt>Responses available to the engine</dt><dd id="observed">—</dd>
 <dt>Activation readiness</dt><dd id="readiness">—</dd>
@@ -109,6 +109,10 @@ function showStatus(s){
  $('adminArea').hidden=false;
  for(const p of s.participants){
   const total=$('progress'+p.role),current=$('current'+p.role);
+  const who=p.isYou?'You':'Other participant';
+  const labelCurrent=$('labelCurrent'+p.role),labelTotal=$('labelTotal'+p.role);
+  if(labelCurrent)labelCurrent.textContent=who+' — current set';
+  if(labelTotal)labelTotal.textContent=who+' — total completed / assigned';
   if(total)total.textContent=p.completed+' / '+p.assigned;
   if(current)current.textContent=p.currentSetCompleted+' / '+p.currentSetSize+
     ' (locations '+p.currentSetStart+'–'+(p.currentSetStart+p.currentSetSize-1)+')';
