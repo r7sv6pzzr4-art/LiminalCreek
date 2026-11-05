@@ -124,4 +124,42 @@ BEGIN
      WHERE sequence_no>100)<>20
  THEN RAISE EXCEPTION 'Appended pair mismatch'; END IF;
 END $$;
-SELECT 'PASS: anonymous/nonadmin denied; 20 matched pairs appended atomically; originals untouched; retry idempotent' AS result;
+-- Simulate both completing locations 101–120 before a second activation.
+INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
+ SELECT a.id,a.study_id,a.user_id,'neutral',NULL
+ FROM public.assignments a WHERE a.sequence_no BETWEEN 101 AND 120;
+SET ROLE authenticated;
+SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+DO $
+DECLARE manifest jsonb; result jsonb;
+BEGIN
+ SELECT jsonb_agg(jsonb_build_object(
+  'pairId',gen_random_uuid(),'mode',CASE WHEN mod(n,2)=0 THEN 'broad' ELSE 'interesting' END,
+  'longitudeA',-74.165+n*0.00005,'latitudeA',40.325,
+  'longitudeB',-74.1649+n*0.00005,'latitudeB',40.3251,
+  'orderA',n,'orderB',41-n,
+  'adaptivePercent',CASE WHEN n<=20 THEN 50 ELSE 75 END
+ ) ORDER BY n) INTO manifest FROM generate_series(1,40) n;
+ result:=public.liminal_admin_commit_auto_batch(
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',240,240,
+  'synthetic-second-long-seed',manifest);
+ IF (result->>'addedPairs')::integer<>40 OR (result->>'firstSequence')::integer<>121
+ THEN RAISE EXCEPTION '40-pair activation failed'; END IF;
+END $;
+RESET ROLE;
+DO $
+BEGIN
+ IF (SELECT count(*) FROM public.assignments)<>320 OR
+    (SELECT count(*) FROM public.responses)<>240 OR
+    (SELECT count(*) FROM public.liminal_auto_batches)<>2
+ THEN RAISE EXCEPTION '40-pair append has wrong totals'; END IF;
+ IF (SELECT count(DISTINCT pair_id) FROM public.assignments
+     WHERE sequence_no BETWEEN 121 AND 160)<>40
+ THEN RAISE EXCEPTION '40 appended pair IDs do not match'; END IF;
+ IF (SELECT hash FROM original_hash) <> (
+   SELECT md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id))
+   FROM public.assignments a WHERE a.sequence_no<=100)
+ THEN RAISE EXCEPTION 'Original assignments modified after second release'; END IF;
+END $;
+SELECT 'PASS: role restrictions, 20 and 40 matched-pair activations, idempotence, originals unchanged' AS result;
+
