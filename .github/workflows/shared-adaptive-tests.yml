@@ -13,6 +13,7 @@ on:
       - 'research/edge-engine-parity.test.mjs'
       - 'research/admin-ui-contract.test.js'
       - 'admin-adaptive.html'
+      - 'admin-adaptive-config.js'
       - 'index.html'
       - 'supabase/functions/liminal-auto-activate/index.ts'
       - 'supabase/functions/_shared/adaptive-engine.mjs'
