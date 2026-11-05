@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek · Study administration</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#e9ede5;background:#142b27}
+*{box-sizing:border-box}body{margin:0}main{max-width:690px;margin:5vh auto;padding:20px}
+h1,h2{font-family:Georgia,serif}h1{font-size:1.65rem}
+.panel{padding:20px;border:1px solid #4e705c;border-radius:15px;background:#203b33;margin:15px 0}
+button{font:inherit;border:1px solid #789387;border-radius:10px;background:#31574a;color:white;padding:12px;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions button{text-align:left;line-height:1.5}
+.actions strong{font-size:1.7rem;display:block}
+.small{font-size:.87rem;color:#b3c8ba}
+.good{color:#b9e1b7}.warning{color:#ffd29d}
+#message{white-space:pre-wrap}
+dl{display:grid;grid-template-columns:1fr auto;gap:10px}dt,dd{margin:0}
+a{color:#d0e9d2}button#refresh{padding:7px 12px}
+[hidden]{display:none!important}
+</style></head>
+<body><main>
+<h1>LiminalCreek · Study administration</h1>
+<p class="small">Private control for the two-participant shared study. The participant app is unchanged.</p>
+<p><a href="./index.html">Return to LiminalCreek</a></p>
+<section class="panel"><h2>Authorization</h2><p id="message" aria-live="polite">Checking your signed-in account…</p><button id="refresh">Refresh status</button></section>
+<div id="adminArea" hidden>
+<section class="panel"><h2>Current shared-study progress</h2>
+<dl>
+<dt>Participant A — completed / assigned</dt><dd id="progressA">—</dd>
+<dt>Participant B — completed / assigned</dt><dd id="progressB">—</dd>
+<dt>Additional matched pairs already released</dt><dd id="existing">—</dd>
+<dt>Next sampling mixture</dt><dd id="mix">—</dd>
+<dt>Activation readiness</dt><dd id="readiness">—</dd>
+</dl><p class="small">A and B are internal participant labels, not names.</p></section>
+<section class="panel"><h2>Activate new locations</h2>
+<p>Choose how many new matched pairs to generate automatically from the latest responses. Both participants receive one location from each pair, in independently randomized order.</p>
+<div class="actions">
+<button id="activate20" disabled><strong>20</strong>New locations per participant</button>
+<button id="activate40" disabled><strong>40</strong>New locations per participant</button>
+</div>
+<p class="small">Only available when both participants have completed every currently assigned location. The engine validates the candidates and adds both sets of assignments atomically; there is no individual location approval step.</p>
+<p class="warning">Activation is a real change to the study when this page is eventually deployed. This development version must not be connected to production until separately tested and approved for deployment.</p>
+</section></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script type="module">
+import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './backend/supabase-config.js';
+const $=id=>document.getElementById(id);
+const client=globalThis.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+ auth:{persistSession:true,autoRefreshToken:true}
+});
+let ready=false,busy=false;
+function message(t){$('message').textContent=t}
+function buttons(){for(const n of [20,40])$('activate'+n).disabled=!ready||busy;$('refresh').disabled=busy}
+async function invoke(body){
+ const {data:{user},error:loginError}=await client.auth.getUser();
+ if(loginError||!user)throw Error('Sign in through the regular LiminalCreek app in this browser first.');
+ const {data,error}=await client.functions.invoke('liminal-auto-activate',{body});
+ if(error){
+  const payload=await error.context?.json?.().catch(()=>null);
+  throw Error(payload?.error||error.message||'Server request failed');
+ }
+ if(data?.error)throw Error(data.error);
+ return data;
+}
+async function load(){
+ busy=true;ready=false;buttons();message('Checking study administration…');
+ try{
+  const {status:s}=await invoke({action:'status'});
+  if(!s||!Array.isArray(s.participants))throw Error('Administrator status is not configured.');
+  $('adminArea').hidden=false;
+  for(const p of s.participants){
+   const target=$('progress'+p.role);
+   if(target)target.textContent=p.completed+' / '+p.assigned+
+     ' (original: '+p.originalCompleted+' / 100)';
+  }
+  $('existing').textContent=String(s.additionalPairs);
+  $('mix').textContent=s.nextAdaptivePercent+'% response-informed / '+
+    (100-s.nextAdaptivePercent)+'% coverage-directed';
+  ready=!!s.canActivate;
+  $('readiness').textContent=ready?'Ready':'Waiting for both participants to complete current assignments';
+  $('readiness').className=ready?'good':'warning';
+  message(ready?'Administrator verified. You can activate 20 or 40 new locations each.':
+   'Administrator verified. Activation will be available when both queues are complete.');
+ }catch(e){
+  ready=false;$('adminArea').hidden=true;
+  message(e instanceof Error?e.message:'Unable to load administrator status');
+ }finally{busy=false;buttons()}
+}
+async function activate(n){
+ if(!ready||busy)return;
+ // A unique request ID makes retries idempotent at the database boundary.
+ const requestId=crypto.randomUUID();
+ busy=true;buttons();message('Generating and validating '+n+' matched pairs…');
+ try{
+  const result=await invoke({action:'activate',count:n,requestId});
+  message('Activated '+result.addedPairs+' matched pairs, starting at location '+
+    result.firstSequence+'. Participants will receive them through the usual app.');
+  ready=false;
+  await load();
+ }catch(e){message('No activation confirmed: '+(e instanceof Error?e.message:String(e))+
+  '\nIf the network was interrupted, refresh the status before trying again.');}
+ finally{busy=false;buttons()}
+}
+$('refresh').onclick=load;
+$('activate20').onclick=()=>activate(20);
+$('activate40').onclick=()=>activate(40);
+load();
+</script></body></html>
