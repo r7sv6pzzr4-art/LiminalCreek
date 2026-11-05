@@ -63,7 +63,7 @@ body.place-mode #map .leaflet-bottom.leaflet-right,body.setup-mode #map .leaflet
 #authPanel p{margin:6px 0;font-size:.86rem;color:#b8c6be}
 header .header-account{display:flex;flex-direction:column;align-items:flex-end;gap:3px}#accountButton{font-size:.78rem;padding:2px 0;background:none;border:0;color:#b7c8b9;text-decoration:underline;text-underline-offset:3px}#authPanel{display:none}#authPanel[open]{display:block;position:fixed;top:90px;left:10px;right:10px;max-width:850px;max-height:70dvh;overflow:auto;z-index:1600;box-shadow:0 8px 32px #0009}#authPanel>summary{display:none}@media(min-width:870px){#authPanel[open]{left:calc(50% - 425px);right:auto;width:850px}}
 </style></head><body>
-<header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><div class="header-account"><span id="identity" class="small"></span><button type="button" id="accountButton" aria-controls="authPanel" aria-expanded="false">Account</button></div></header>
+<header><div><h1>LiminalCreek</h1><small>A quiet survey of place</small></div><div class="header-account"><span id="identity" class="small"></span><a id="adminToolsLink" href="./admin-adaptive.html" hidden style="color:#d3e7d3;font-size:.85rem">Admin</a><button type="button" id="accountButton" aria-controls="authPanel" aria-expanded="false">Account</button></div></header>
 <details id="authPanel"><summary>Account · <span id="authIdentity">Not signed in</span></summary><p>Sign in to continue your LiminalCreek observations.</p><div class="auth-row"><input id="authEmail" type="email" autocomplete="email" placeholder="Your email address" aria-label="Email address"><button type="button" id="authSend">Email me a sign-in link</button><button type="button" id="authSignOut" hidden>Sign out</button></div><div class="auth-row" id="authLinkRow"><input id="authPasteLink" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the sign-in link from your email" aria-label="Paste sign-in email link"><button type="button" id="authUseLink">Sign in with pasted link</button></div><p id="authLinkHelp">For the Home Screen app: request an email, then <strong>copy</strong> its sign-in link (do not open it). Return here, paste it, and tap Sign in. The link can be used only once.</p><p id="authStatus" aria-live="polite">Connecting…</p></details>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
@@ -289,6 +289,18 @@ async function loadLive(){
 $('modeToggle').onclick=()=>{if(!prototypeAccess)return;liveMode=!liveMode;placePresented=false;setDockCollapsed(false);resetForm();if(liveMode)loadLive();else{livePlace=null;liveStats=null;info('feedback','Local prototype restored. Test responses remain on this device.');refresh()}};
 $('liveReload').onclick=loadLive;
 window.addEventListener('liminal-auth',()=>{if(liveMode)loadLive()});
+// This link is entirely absent from the participant's visible UI.
+// Supabase verifies administrator status on the server; this is only a display hint.
+let adminCheckVersion=0;
+window.addEventListener('liminal-auth',async event=>{
+ const link=document.getElementById('adminToolsLink'),version=++adminCheckVersion;
+ link.hidden=true;
+ if(!event.detail?.user||!window.liminalClient)return;
+ try{
+  const {data,error}=await window.liminalClient.rpc('liminal_admin_auto_status');
+  if(version===adminCheckVersion&&!error&&data?.studyId)link.hidden=false;
+ }catch(e){/* Optional admin capability is unavailable in the current live schema. */}
+});
 
 document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{currentV=b.dataset.v;chosen=[];document.querySelectorAll('[data-v]').forEach(x=>x.classList.toggle('active',x===b));$('details').replaceChildren();let title=document.createElement('p');title.textContent='Choose one or more descriptions:';$('details').append(title);categories[currentV].forEach(c=>{let x=document.createElement('button');x.textContent=c;x.onclick=()=>{if(chosen.includes(c))chosen=chosen.filter(z=>z!==c);else chosen.push(c);x.classList.toggle('chosen',chosen.includes(c))};$('details').append(x)});$('strengthWrap').hidden=currentV==='neutral';});
 
