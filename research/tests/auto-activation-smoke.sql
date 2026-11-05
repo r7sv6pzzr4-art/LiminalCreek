@@ -156,7 +156,7 @@ INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
 SET ROLE authenticated;
 SET request.jwt.claim.role = 'authenticated';
 SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-DO $
+DO $$
 DECLARE stat jsonb;
 BEGIN
  stat:=public.liminal_admin_auto_status();
@@ -165,11 +165,11 @@ BEGIN
   (stat->'participants'->0->>'currentSetCompleted')::integer<>16 OR
   (stat->'participants'->1->>'currentSetCompleted')::integer<>19
  THEN RAISE EXCEPTION 'Expected 16/20 and 19/20 partial-set readiness'; END IF;
-END $;
+END $$;
 RESET ROLE;
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
-DO $
+DO $$
 DECLARE manifest jsonb; result jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
