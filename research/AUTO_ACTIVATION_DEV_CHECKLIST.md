@@ -23,6 +23,7 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 
 - `index.html`: admin-link only; participant UI and submission workflow otherwise unchanged
 - `admin-adaptive.html`: administrator status and 20/40 activation controls
+- `admin-adaptive-config.js`: deliberately blank connection settings on this development branch; the administrator page is **disabled** until explicitly set to an isolated staging project
 - `supabase/functions/liminal-auto-activate/index.ts`: private Edge Function, JWT and administrator checks, generation, retry check
 - `supabase/functions/_shared/adaptive-engine.mjs`: shared adaptive selection engine (not the personal hotspot engine)
 - `research/drafts/auto-activation.DO-NOT-RUN.sql`: new private batch table, admin status RPC, atomic server-only commit RPC
@@ -42,6 +43,8 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 ## Mandatory next verification — isolated Supabase staging
 
 - Create a completely separate Supabase project. Do not clone production data, auth accounts, assignments, participant emails, or secrets.
+- Configure **only** `admin-adaptive-config.js` with the staging project's public URL/publishable key during staging. It is blank by default. Never point a development administration page at the production project.
+- Before browser-testing the participant app itself, replace the copied `auth.js` project settings with **staging** settings in an isolated staging build. The source `auth.js` currently retains the live app's production settings and must not be exercised against the live study during development.
 - Apply a fresh copy of the relevant study schema, existing live collection API, then the proposed adaptive draft **to staging only**.
 - Use two synthetic test identities (one designated admin). Insert 100 synthetic matched pairs and mock responses through controlled fixtures.
 - Deploy the Edge Function only to staging, with staging-specific keys. Verify administrator status is denied to non-admin, public/anonymous clients cannot read responses, and both participant apps remain blinded.
@@ -57,7 +60,7 @@ The *previous* offline, map-reviewed 20 are test proposals. They are **not** aut
 
 1. Validate a fresh read-only production permissions inventory. Obtain and verify a fresh database backup, including participant comments and existing responses.
 2. Pause while assessing the latest development and deployed versions to ensure no unrelated participant UI change is being merged.
-3. Apply only the reviewed additive migration and Edge Function, then the reviewed admin-only app update, after explicit go-ahead.
+3. Apply only the reviewed additive migration and Edge Function, then the reviewed admin-only app update, after explicit go-ahead. The production admin connection settings must be enabled as part of that separate, explicitly reviewed release; the development branch's default stays disconnected.
 4. Test administrator status before any activation. Record production counts and hashes before and after.
 5. **Do not activate any new locations automatically during deployment.** The administrator must deliberately choose 20 or 40 after both participants finish the currently assigned locations.
 6. Never reveal hidden participant responses, comments or partner locations before the planned study conclusion.
