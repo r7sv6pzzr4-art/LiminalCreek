@@ -44,11 +44,12 @@ a{color:#d0e9d2}button#refresh{padding:7px 12px}
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script type="module">
-import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './backend/supabase-config.js';
+import {ADMIN_SUPABASE_URL,ADMIN_SUPABASE_PUBLISHABLE_KEY} from './admin-adaptive-config.js';
 const $=id=>document.getElementById(id);
-const client=globalThis.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
- auth:{persistSession:true,autoRefreshToken:true}
-});
+const client=ADMIN_SUPABASE_URL&&ADMIN_SUPABASE_PUBLISHABLE_KEY
+ ? globalThis.supabase.createClient(ADMIN_SUPABASE_URL,ADMIN_SUPABASE_PUBLISHABLE_KEY,{
+  auth:{persistSession:true,autoRefreshToken:true}
+ }):null;
 let ready=false,busy=false;
 const pendingKey='liminal-admin-activation-request-v1';
 function readPending(){
@@ -73,6 +74,7 @@ function buttons(){
  $('refresh').disabled=busy;
 }
 async function invoke(body){
+ if(!client)throw Error('Development admin controls are intentionally disconnected. Configure a separate staging Supabase project first.');
  const {data:{user},error:loginError}=await client.auth.getUser();
  if(loginError||!user)throw Error('Sign in through the regular LiminalCreek app in this browser first.');
  const {data,error}=await client.functions.invoke('liminal-auto-activate',{body});
@@ -142,5 +144,6 @@ async function activate(n){
 $('refresh').onclick=load;
 $('activate20').onclick=()=>activate(20);
 $('activate40').onclick=()=>activate(40);
-load();
+if(client)load();
+else message('Administrator controls are disabled on this development branch. Connect only an isolated staging database for testing.');
 </script></body></html>
