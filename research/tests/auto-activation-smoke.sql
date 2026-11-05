@@ -35,16 +35,16 @@ INSERT INTO public.studies(id,started_at) VALUES
  ('11111111-1111-4111-8111-111111111111',now());
 INSERT INTO public.participants(study_id,user_id,display_name,is_admin) VALUES
  ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Admin',true),
- ('11111111-1111-4111-8111-111111111111','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','Brother',false);
+ ('11111111-1111-4111-8111-111111111111'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,'Brother',false);
 WITH pairs AS (
  SELECT n,gen_random_uuid() AS pair_id FROM generate_series(1,100) n
 )
 INSERT INTO public.assignments
  (study_id,user_id,pair_id,sequence_no,longitude,latitude,sampling_type)
-SELECT '11111111-1111-4111-8111-111111111111', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+SELECT '11111111-1111-4111-8111-111111111111'::uuid, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,
  pair_id,n,-74.17+n*0.00008,40.32,'broad' FROM pairs
 UNION ALL
-SELECT '11111111-1111-4111-8111-111111111111','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+SELECT '11111111-1111-4111-8111-111111111111'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,
  pair_id,n,-74.1699+n*0.00008,40.3201,'broad' FROM pairs;
 INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
  SELECT id,study_id,user_id,'neutral',NULL FROM public.assignments;
