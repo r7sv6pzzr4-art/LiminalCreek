@@ -115,6 +115,7 @@ CREATE OR REPLACE FUNCTION public.liminal_admin_commit_auto_batch(
   p_expected_assignment_rows integer,
   p_expected_response_rows integer,
   p_seed text,
+  p_adaptive_percent smallint,
   p_pairs jsonb
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $$
@@ -124,12 +125,14 @@ DECLARE sid uuid; members uuid[]; rows_current bigint; responses_current bigint;
         v_mode text; v_pair uuid; v_lona double precision; v_lata double precision;
         v_lonb double precision; v_latb double precision; v_ordera integer;
         v_orderb integer; v_percent integer; v_dist double precision;
-        v_row jsonb;
+        v_row jsonb; last_batch_start integer; most_completed integer;
+        broad_count integer; expected_broad double precision;
 BEGIN
  IF auth.role() IS DISTINCT FROM 'service_role' THEN
   RAISE EXCEPTION 'Trusted server coordinator required'; END IF;
  IF p_actor_user_id IS NULL THEN RAISE EXCEPTION 'Verified administrator ID required'; END IF;
- IF p_request_id IS NULL OR p_seed IS NULL OR length(p_seed)<12 THEN
+ IF p_request_id IS NULL OR p_seed IS NULL OR length(p_seed)<12
+ OR p_adaptive_percent NOT IN (50,75) OR p_adaptive_percent IS NULL THEN
   RAISE EXCEPTION 'Invalid activation request';
  END IF;
  SELECT p.study_id INTO sid FROM public.participants p
@@ -155,10 +158,21 @@ BEGIN
  IF rows_current<>p_expected_assignment_rows OR responses_current<>p_expected_response_rows THEN
   RAISE EXCEPTION 'Study changed since sampling snapshot; retry activation';
  END IF;
- IF rows_current<200 OR mod(rows_current,2)<>0 OR rows_current<>responses_current THEN
-  RAISE EXCEPTION 'Both participants must finish all currently assigned locations';
+ IF rows_current<200 OR mod(rows_current,2)<>0 OR responses_current>rows_current THEN
+  RAISE EXCEPTION 'Invalid study assignment/response inventory';
  END IF;
  start_seq:=rows_current/2+1;
+ -- Do not stack multiple batches ahead: one unopened batch is sufficient
+ -- to avoid a gap when participants reach the end of the current set.
+ SELECT max(b.first_sequence) INTO last_batch_start
+ FROM public.liminal_auto_batches b WHERE b.study_id=sid;
+ SELECT greatest(
+   (SELECT count(*) FROM public.responses r WHERE r.study_id=sid AND r.user_id=v_a),
+   (SELECT count(*) FROM public.responses r WHERE r.study_id=sid AND r.user_id=v_b)
+ ) INTO most_completed;
+ IF last_batch_start IS NOT NULL AND most_completed<last_batch_start THEN
+  RAISE EXCEPTION 'An upcoming batch is already queued';
+ END IF;
  IF (SELECT count(*) FROM public.assignments a WHERE a.study_id=sid AND a.user_id=v_a)<>start_seq-1
  OR (SELECT count(*) FROM public.assignments a WHERE a.study_id=sid AND a.user_id=v_b)<>start_seq-1
  OR (SELECT count(DISTINCT a.pair_id) FROM public.assignments a
@@ -168,12 +182,17 @@ BEGIN
    SELECT 1 FROM unnest(members) AS uid
    WHERE (SELECT count(*) FROM public.assignments a WHERE a.study_id=sid
           AND a.user_id=uid AND a.sequence_no BETWEEN 1 AND 100)<>100
-    OR (SELECT count(*) FROM public.responses r JOIN public.assignments a ON r.assignment_id=a.id
-        WHERE a.study_id=sid AND a.user_id=uid AND a.sequence_no BETWEEN 1 AND 100)<>100
- ) THEN RAISE EXCEPTION 'Original 100 must be complete for both people'; END IF;
+ ) THEN RAISE EXCEPTION 'Original assignment inventory must contain 100 per participant'; END IF;
  IF jsonb_typeof(p_pairs)<>'array' THEN RAISE EXCEPTION 'Pair manifest must be an array'; END IF;
  pair_count:=jsonb_array_length(p_pairs);
- IF pair_count NOT IN (20,40) THEN RAISE EXCEPTION 'Choose exactly 20 or 40 matched pairs'; END IF;
+ IF pair_count NOT IN (10,20,30,40) THEN RAISE EXCEPTION 'Choose 10, 20, 30 or 40 matched pairs'; END IF;
+ -- Require the selected mix approximately (mode-count rounding may differ by one).
+ SELECT count(*) INTO broad_count FROM jsonb_array_elements(p_pairs) x
+ WHERE x->>'mode'='broad';
+ expected_broad := pair_count*(100-p_adaptive_percent)/100.0;
+ IF abs(broad_count-expected_broad)>1 THEN
+  RAISE EXCEPTION 'Sampling mixture does not match selected preset';
+ END IF;
  -- Distinct pair IDs and independent, complete sequence permutations.
  IF (SELECT count(DISTINCT (x->>'pairId')) FROM jsonb_array_elements(p_pairs) x)<>pair_count OR
     (SELECT count(DISTINCT (x->>'orderA')::integer) FROM jsonb_array_elements(p_pairs) x)<>pair_count OR
@@ -196,21 +215,23 @@ BEGIN
   v_ordera:=(v_row->>'orderA')::integer;
   v_orderb:=(v_row->>'orderB')::integer;
   v_percent:=(v_row->>'adaptivePercent')::integer;
-  IF v_mode NOT IN ('interesting','uncertain','quiet','broad')
+  IF v_mode IS NULL OR v_mode NOT IN ('interesting','uncertain','quiet','broad')
+    OR v_lona IS NULL OR v_lonb IS NULL OR v_lata IS NULL OR v_latb IS NULL
+    OR v_ordera IS NULL OR v_orderb IS NULL OR v_pair IS NULL
     OR v_lona NOT BETWEEN -180 AND 180 OR v_lonb NOT BETWEEN -180 AND 180
     OR v_lata NOT BETWEEN -90 AND 90 OR v_latb NOT BETWEEN -90 AND 90
-    OR v_percent<>(CASE WHEN start_seq+idx<=140 THEN 50 ELSE 75 END)
+    OR v_percent IS NULL OR v_percent<>p_adaptive_percent
   THEN RAISE EXCEPTION 'Candidate validation failed'; END IF;
   v_dist:=6371008.8 * sqrt(
     power((v_lonb-v_lona)*pi()/180*cos((v_lata+v_latb)*pi()/360),2)
     +power((v_latb-v_lata)*pi()/180,2));
-  IF v_dist>60.97 OR v_dist<0.01 THEN RAISE EXCEPTION 'Pair separation outside permitted range'; END IF;
+  IF v_dist IS NULL OR v_dist>60.97 OR v_dist<0.01 THEN RAISE EXCEPTION 'Pair separation outside permitted range'; END IF;
   IF EXISTS(SELECT 1 FROM public.assignments a WHERE a.pair_id=v_pair) THEN
    RAISE EXCEPTION 'Pair was already assigned'; END IF;
  END LOOP;
  INSERT INTO public.liminal_auto_batches
-  (study_id,request_id,first_sequence,pair_count,source_response_count,seed,frozen_pairs)
- VALUES(sid,p_request_id,start_seq,pair_count,responses_current,p_seed,p_pairs)
+  (study_id,request_id,first_sequence,pair_count,source_response_count,adaptive_percent,seed,frozen_pairs)
+ VALUES(sid,p_request_id,start_seq,pair_count,responses_current,p_adaptive_percent,p_seed,p_pairs)
  RETURNING id INTO v_batch_id;
  -- Both insertions are part of the same DB transaction as the frozen manifest.
  INSERT INTO public.assignments
@@ -230,7 +251,7 @@ BEGIN
  RETURN jsonb_build_object('batchId',v_batch_id,'addedPairs',pair_count,
    'firstSequence',start_seq,'alreadyCommitted',false);
 END $$;
-REVOKE ALL ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,smallint,jsonb) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,smallint,jsonb) TO service_role;
 
 -- Always run permission audits again after any eventual deployment.
