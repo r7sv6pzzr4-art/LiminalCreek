@@ -8,6 +8,12 @@ h1,h2{font-family:Georgia,serif}h1{font-size:1.65rem}
 .panel{padding:20px;border:1px solid #4e705c;border-radius:15px;background:#203b33;margin:15px 0}
 button{font:inherit;border:1px solid #789387;border-radius:10px;background:#31574a;color:white;padding:12px;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
+select{width:100%;padding:11px;background:#142d24;color:#e9ede5;border:1px solid #789387;border-radius:10px;font:inherit}
+label{display:block;margin:12px 0 7px;font-weight:600}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:560px){.formgrid{grid-template-columns:1fr}}
+#setProgress{font-size:.92rem;color:#c9dbcc}
+button#activate{width:100%;margin-top:16px;text-align:center}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .actions button{text-align:left;line-height:1.5}
 .actions strong{font-size:1.7rem;display:block}
@@ -26,19 +32,28 @@ a{color:#d0e9d2}button#refresh{padding:7px 12px}
 <div id="adminArea" hidden>
 <section class="panel"><h2>Current shared-study progress</h2>
 <dl>
-<dt>Participant A — completed / assigned</dt><dd id="progressA">—</dd>
-<dt>Participant B — completed / assigned</dt><dd id="progressB">—</dd>
-<dt>Additional matched pairs already released</dt><dd id="existing">—</dd>
-<dt>Next sampling mixture</dt><dd id="mix">—</dd>
+<dt>Participant A — current set</dt><dd id="currentA">—</dd>
+<dt>Participant B — current set</dt><dd id="currentB">—</dd>
+<dt>Participant A — total completed / assigned</dt><dd id="progressA">—</dd>
+<dt>Participant B — total completed / assigned</dt><dd id="progressB">—</dd>
+<dt>Additional matched pairs already assigned</dt><dd id="existing">—</dd>
+<dt>Responses available to the engine</dt><dd id="observed">—</dd>
 <dt>Activation readiness</dt><dd id="readiness">—</dd>
 </dl><p class="small">A and B are internal participant labels, not names.</p></section>
 <section class="panel"><h2>Activate new locations</h2>
-<p>Choose how many new matched pairs to generate automatically from the latest responses. Both participants receive one location from each pair, in independently randomized order.</p>
-<div class="actions">
-<button id="activate20" disabled><strong>20</strong>New locations per participant</button>
-<button id="activate40" disabled><strong>40</strong>New locations per participant</button>
+<p>Generate and add an upcoming batch now, even when a current set is not finished. Only submitted responses inform the adaptive part; unfinished locations are not treated as neutral.</p>
+<div class="formgrid">
+<div><label for="pairCount">New matched pairs</label><select id="pairCount">
+<option value="10">10 pairs</option><option value="20" selected>20 pairs</option>
+<option value="30">30 pairs</option><option value="40">40 pairs</option>
+</select></div>
+<div><label for="adaptivePercent">Adaptive sampling mixture</label><select id="adaptivePercent">
+<option value="50">50% response-informed / 50% coverage</option>
+<option value="75">75% response-informed / 25% coverage</option>
+</select></div>
 </div>
-<p class="small">Only available when both participants have completed every currently assigned location. The engine validates the candidates and adds both sets of assignments atomically; there is no individual location approval step.</p>
+<button id="activate" disabled>Generate and add selected pairs</button>
+<p class="small">A batch is appended after the locations already assigned to each participant. Each receives one location per pair, in independently randomized order. To avoid accidentally stacking work, an unstarted future batch prevents another activation.</p>
 <p class="warning">Activation is a real change to the study when this page is eventually deployed. This development version must not be connected to production until separately tested and approved for deployment.</p>
 </section></div>
 </main>
@@ -50,12 +65,13 @@ const client=ADMIN_SUPABASE_URL&&ADMIN_SUPABASE_PUBLISHABLE_KEY
  ? globalThis.supabase.createClient(ADMIN_SUPABASE_URL,ADMIN_SUPABASE_PUBLISHABLE_KEY,{
   auth:{persistSession:true,autoRefreshToken:true}
  }):null;
-let ready=false,busy=false;
-const pendingKey='liminal-admin-activation-request-v1';
+let ready=false,busy=false,selectionChanged=false,lastStatus=null;
+const pendingKey='liminal-admin-activation-request-v2';
 function readPending(){
  try{
   const p=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
-  if(p&&[20,40].includes(p.count)&&typeof p.requestId==='string')return p;
+  if(p&&[10,20,30,40].includes(p.count)&&[50,75].includes(p.adaptivePercent)&&
+     typeof p.requestId==='string')return p;
  }catch(e){}
  return null;
 }
@@ -70,11 +86,13 @@ function clearPending(){
 }
 function message(t){$('message').textContent=t}
 function buttons(){
- for(const n of [20,40])$('activate'+n).disabled=!ready||busy||!!(pending&&pending.count!==n);
+ $('activate').disabled=!ready||busy;
+ $('pairCount').disabled=busy||!!pending;
+ $('adaptivePercent').disabled=busy||!!pending;
  $('refresh').disabled=busy;
 }
 async function invoke(body){
- if(!client)throw Error('Development admin controls are intentionally disconnected. Configure a separate staging Supabase project first.');
+ if(!client)throw Error('Development administration is disconnected. Configure an isolated staging project.');
  const {data:{user},error:loginError}=await client.auth.getUser();
  if(loginError||!user)throw Error('Sign in through the regular LiminalCreek app in this browser first.');
  const {data,error}=await client.functions.invoke('liminal-auto-activate',{body});
@@ -85,6 +103,26 @@ async function invoke(body){
  if(data?.error)throw Error(data.error);
  return data;
 }
+function showStatus(s){
+ lastStatus=s;
+ if(!s||!Array.isArray(s.participants))throw Error('Administrator status is not configured.');
+ $('adminArea').hidden=false;
+ for(const p of s.participants){
+  const total=$('progress'+p.role),current=$('current'+p.role);
+  if(total)total.textContent=p.completed+' / '+p.assigned;
+  if(current)current.textContent=p.currentSetCompleted+' / '+p.currentSetSize+
+    ' (locations '+p.currentSetStart+'–'+(p.currentSetStart+p.currentSetSize-1)+')';
+ }
+ $('existing').textContent=String(s.additionalPairs);
+ $('observed').textContent=String(s.responseRows);
+ if(!selectionChanged&&!pending)
+  $('adaptivePercent').value=String(s.recommendedAdaptivePercent);
+ ready=!!s.canActivate;
+ $('readiness').textContent=ready?'Ready to add upcoming locations':
+   s.unstartedBatchQueued?'An upcoming batch is already queued':
+   'Study assignment inventory is not yet ready';
+ $('readiness').className=ready?'good':'warning';
+}
 async function load(){
  busy=true;ready=false;buttons();message('Checking study administration…');
  try{
@@ -94,56 +132,53 @@ async function load(){
    if(check.committed){confirmed=check;clearPending()}
   }
   const {status:s}=await invoke({action:'status'});
-  if(!s||!Array.isArray(s.participants))throw Error('Administrator status is not configured.');
-  $('adminArea').hidden=false;
-  for(const p of s.participants){
-   const target=$('progress'+p.role);
-   if(target)target.textContent=p.completed+' / '+p.assigned+
-     ' (original: '+p.originalCompleted+' / 100)';
-  }
-  $('existing').textContent=String(s.additionalPairs);
-  const cross=s.nextSequence===121;
-  $('mix').textContent=s.nextAdaptivePercent+'% adaptive for the next 20'+
-   (cross?'; a 40-location batch then uses 75% adaptive for its second 20':'');
-  ready=!!s.canActivate;
-  $('readiness').textContent=ready?'Ready':'Waiting for both participants to complete current assignments';
-  $('readiness').className=ready?'good':'warning';
-  if(confirmed)message('Confirmed: the earlier activation added '+confirmed.addedPairs+
-    ' pairs, starting at location '+confirmed.firstSequence+'. No duplicate was created.');
-  else if(pending)message('A previous '+pending.count+'-pair request is not yet confirmed. '+
-    (ready?'Select that same batch size to retry safely using its original request ID.':
-    'Current assignments are not all complete; refresh to verify the earlier outcome.'));
-  else message(ready?'Administrator verified. You can activate 20 or 40 new locations each.':
-   'Administrator verified. Activation will be available when both queues are complete.');
+  showStatus(s);
+  if(confirmed)message('Confirmed: the earlier request added '+confirmed.addedPairs+
+    ' pairs, beginning at location '+confirmed.firstSequence+'. No duplicate was created.');
+  else if(pending){
+   $('pairCount').value=String(pending.count);
+   $('adaptivePercent').value=String(pending.adaptivePercent);
+   message('A previous activation is not yet confirmed. Use Refresh to verify; '+
+    (ready?'the same button will retry the original request safely.':
+     'a batch may still be processing.'));
+  }else message(ready?'Administrator verified. You can append locations before either current set is finished.':
+   s.unstartedBatchQueued?'One future batch is already in the queue. Let one participant begin it before adding another.':
+   'Administrator verified. Activation is unavailable until the study inventory is valid.');
  }catch(e){
   ready=false;$('adminArea').hidden=true;
   message(e instanceof Error?e.message:'Unable to load administrator status');
  }finally{busy=false;buttons()}
 }
-async function activate(n){
- if(!ready||busy||(pending&&pending.count!==n))return;
+async function activate(){
+ if(!ready||busy)return;
+ const count=Number($('pairCount').value);
+ const adaptivePercent=Number($('adaptivePercent').value);
+ if(![10,20,30,40].includes(count)||![50,75].includes(adaptivePercent))return;
  if(!pending){
-  if(!window.confirm('Generate and permanently add '+n+
-   ' matched pairs to BOTH participants? This does not reveal responses and cannot be undone in the app.'))return;
-  rememberPending({count:n,requestId:crypto.randomUUID()});
+  const completed=lastStatus?.participants?.map(p=>p.role+': '+p.completed).join(', ')||'unavailable';
+  if(!window.confirm('Generate and append '+count+' new paired locations to BOTH participants using '+
+    adaptivePercent+'% adaptive sampling?\nResponses currently submitted: '+
+    completed+'.\nExisting locations will remain in order.'))return;
+  rememberPending({count,adaptivePercent,requestId:crypto.randomUUID()});
  }
  const requestId=pending.requestId;
- busy=true;buttons();message('Generating and validating '+n+' matched pairs…');
+ busy=true;buttons();message('Generating '+count+' matched pairs from submitted responses…');
  try{
-  const result=await invoke({action:'activate',count:n,requestId});
+  const result=await invoke({action:'activate',count,adaptivePercent,requestId});
   clearPending();ready=false;
   await load();
-  message('Activated '+result.addedPairs+' matched pairs, starting at location '+
-    result.firstSequence+'. Both participants will receive them through the usual app.');
+  message('Added '+result.addedPairs+' pairs at locations '+result.firstSequence+'–'+
+   (result.firstSequence+result.addedPairs-1)+
+   '. The current unfinished assignments remain first in each queue.');
  }catch(e){
   message('Activation outcome is unconfirmed: '+(e instanceof Error?e.message:String(e))+
-   '\nUse Refresh status to verify. If needed, the same-size button safely retries the ORIGINAL request.');
- }
- finally{busy=false;buttons()}
+   '\nUse Refresh status before trying again. The same request ID prevents duplicates.');
+ }finally{busy=false;buttons()}
 }
+$('pairCount').addEventListener('change',()=>{selectionChanged=true});
+$('adaptivePercent').addEventListener('change',()=>{selectionChanged=true});
 $('refresh').onclick=load;
-$('activate20').onclick=()=>activate(20);
-$('activate40').onclick=()=>activate(40);
+$('activate').onclick=activate;
 if(client)load();
 else message('Administrator controls are disabled on this development branch. Connect only an isolated staging database for testing.');
 </script></body></html>
