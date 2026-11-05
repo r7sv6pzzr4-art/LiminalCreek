@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek · Administrator offline preview</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#e9ede5;background:#142b27}
+*{box-sizing:border-box}body{margin:0}main{max-width:690px;margin:5vh auto;padding:20px}
+h1,h2{font-family:Georgia,serif}h1{font-size:1.65rem}
+.panel{padding:20px;border:1px solid #4e705c;border-radius:15px;background:#203b33;margin:15px 0}
+button{font:inherit;border:1px solid #789387;border-radius:10px;background:#31574a;color:white;padding:12px;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+select{width:100%;padding:11px;background:#142d24;color:#e9ede5;border:1px solid #789387;border-radius:10px;font:inherit}
+label{display:block;margin:12px 0 7px;font-weight:600}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:560px){.formgrid{grid-template-columns:1fr}}
+#setProgress{font-size:.92rem;color:#c9dbcc}
+button#activate{width:100%;margin-top:16px;text-align:center}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions button{text-align:left;line-height:1.5}
+.actions strong{font-size:1.7rem;display:block}
+.small{font-size:.87rem;color:#b3c8ba}
+.good{color:#b9e1b7}.warning{color:#ffd29d}
+#message{white-space:pre-wrap}
+dl{display:grid;grid-template-columns:1fr auto;gap:10px}dt,dd{margin:0}
+a{color:#d0e9d2}button#refresh{padding:7px 12px}
+[hidden]{display:none!important}
+</style></head>
+<body><main>
+<h1>LiminalCreek · Study administration</h1>
+<p class="warning"><strong>OFFLINE PREVIEW</strong> — 116/120 and 119/120 are synthetic examples. Nothing in this page connects to Supabase.</p>
+<p class="small">Private control for the two-participant shared study. The participant app is unchanged.</p>
+<p><a href="./index.html">Return to LiminalCreek development app</a></p>
+<section class="panel"><h2>Authorization</h2><p id="message" aria-live="polite">Checking your signed-in account…</p><button id="refresh">Refresh status</button></section>
+<div id="adminArea" hidden>
+<section class="panel"><h2>Current shared-study progress</h2>
+<dl>
+<dt>Participant A — current set</dt><dd id="currentA">—</dd>
+<dt>Participant B — current set</dt><dd id="currentB">—</dd>
+<dt>Participant A — total completed / assigned</dt><dd id="progressA">—</dd>
+<dt>Participant B — total completed / assigned</dt><dd id="progressB">—</dd>
+<dt>Additional matched pairs already assigned</dt><dd id="existing">—</dd>
+<dt>Responses available to the engine</dt><dd id="observed">—</dd>
+<dt>Activation readiness</dt><dd id="readiness">—</dd>
+</dl><p class="small">A and B are internal participant labels, not names.</p></section>
+<section class="panel"><h2>Activate new locations</h2>
+<p>Generate and add an upcoming batch now, even when a current set is not finished. Only submitted responses inform the adaptive part; unfinished locations are not treated as neutral.</p>
+<div class="formgrid">
+<div><label for="pairCount">New matched pairs</label><select id="pairCount">
+<option value="10">10 pairs</option><option value="20" selected>20 pairs</option>
+<option value="30">30 pairs</option><option value="40">40 pairs</option>
+</select></div>
+<div><label for="adaptivePercent">Adaptive sampling mixture</label><select id="adaptivePercent">
+<option value="50">50% response-informed / 50% coverage</option>
+<option value="75">75% response-informed / 25% coverage</option>
+</select></div>
+</div>
+<button id="activate" disabled>Generate and add selected pairs</button>
+<p class="small">A batch is appended after the locations already assigned to each participant. Each receives one location per pair, in independently randomized order. To avoid accidentally stacking work, an unstarted future batch prevents another activation.</p>
+<p class="warning">Activation is a real change to the study when this page is eventually deployed. This development version must not be connected to production until separately tested and approved for deployment.</p>
+</section></div>
+</main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+$('adminArea').hidden=false;
+$('message').textContent='OFFLINE DESIGN PREVIEW — synthetic progress only. No database connection or activation.';
+$('refresh').disabled=true;
+$('progressA').textContent='116 / 120';
+$('progressB').textContent='119 / 120';
+$('currentA').textContent='16 / 20 (locations 101–120)';
+$('currentB').textContent='19 / 20 (locations 101–120)';
+$('existing').textContent='20';
+$('observed').textContent='235';
+$('readiness').textContent='Ready to add upcoming locations';
+$('readiness').className='good';
+$('activate').textContent='Activation disabled in offline preview';
+$('activate').disabled=true;
+const summary=document.createElement('p');
+summary.className='small';
+summary.id='demoChoices';
+$('activate').insertAdjacentElement('afterend',summary);
+function update(){
+ const n=Number($('pairCount').value),ratio=Number($('adaptivePercent').value);
+ summary.textContent='Example: would append '+n+' pairs as locations 121–'+(120+n)+
+ ', based on 235 submitted observations, with '+ratio+'% response-informed and '+
+ (100-ratio)+'% coverage-directed selection.';
+}
+$('pairCount').addEventListener('change',update);
+$('adaptivePercent').addEventListener('change',update);
+update();
+})();
+</script></body></html>
