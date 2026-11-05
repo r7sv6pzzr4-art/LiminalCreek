@@ -106,22 +106,25 @@ Deno.serve(async req=>{
   // A prior committed request must be recognized even if today's assignment
   // queue is no longer ready. This prevents duplicate creation on lost replies.
   const {data:prior,error:priorError}=await admin.from("liminal_auto_batches")
-   .select("id,pair_count,first_sequence").eq("study_id",membership.study_id)
+   .select("id,pair_count,first_sequence,adaptive_percent").eq("study_id",membership.study_id)
    .eq("request_id",requestId).maybeSingle();
   if(priorError)throw Error("Could not verify previous activation");
   if(payload.action==="check")
    return reply({committed:!!prior,addedPairs:prior?.pair_count||0,
     firstSequence:prior?.first_sequence||null,batchId:prior?.id||null});
   const requested=payload.count;
-  if(requested!==20&&requested!==40)return fail("Choose 20 or 40 pairs",400);
+  const requestedPercent=payload.adaptivePercent;
+  if(![10,20,30,40].includes(requested))return fail("Choose 10, 20, 30 or 40 pairs",400);
+  if(![50,75].includes(requestedPercent))return fail("Choose 50% or 75% response-informed",400);
   if(prior){
-   if(prior.pair_count!==requested)return fail("Request ID already used with another batch size",409);
+   if(prior.pair_count!==requested||prior.adaptive_percent!==requestedPercent)
+    return fail("Request ID already used with another batch setting",409);
    return reply({activated:true,alreadyCommitted:true,addedPairs:prior.pair_count,
     firstSequence:prior.first_sequence,batchId:prior.id});
   }
   const {data:status,error:statusError}=await caller.rpc("liminal_admin_auto_status");
   if(statusError||!status?.canActivate)return fail(
-   "Both participants must finish all currently assigned locations before activation");
+   "An upcoming batch is already queued, or study assignments need verification");
   const studyId=membership.study_id;
   if(status.studyId!==studyId)throw Error("Study authorization mismatch");
   const {data:study,error:studyError}=await admin.from("studies")
@@ -138,8 +141,8 @@ Deno.serve(async req=>{
   const assignments=assignmentRows as Assignment[],responses=responseRows as ResponseRow[];
   requireCheck(assignments.length===status.assignedRows&&responses.length===status.responseRows,
    "Study snapshot changed; retry");
-  requireCheck(assignments.length>=200&&assignments.length===responses.length&&
-    assignments.length%2===0,"Both participant queues must be fully completed");
+  requireCheck(assignments.length>=200&&responses.length<=assignments.length&&
+    assignments.length%2===0,"Study assignment/response counts are inconsistent");
   const userSet=new Set(members);
   const byId=new Map(assignments.map(a=>[a.id,a]));
   requireCheck(byId.size===assignments.length,"Duplicate assignment");
@@ -176,24 +179,21 @@ Deno.serve(async req=>{
   for(const pair of existingPairs)
    requireCheck(eligible(pair.A)&&eligible(pair.B),"Existing assignment outside eligible area");
   const seed=crypto.randomUUID();
+  // Both participants' assigned coordinates are used to avoid repeats, but
+  // ONLY submitted responses enter the adaptive evidence calculation.
+  // Incomplete current sets are never treated as neutral observations.
+  const next=generateBatch({count:requested,bounds,eligible,
+   observations,existingPairs,
+   batchIndex:Number(status.releasedBatches||0)+1,
+   seed,adaptivePercent:requestedPercent});
+  requireCheck(next.pairs.length===requested,"Sampling engine returned the wrong count");
   const requestedRows:any[]=[];
-  const currentPairs=existingPairs.slice();
-  const nextSequence=existingPairs.length+1;
-  for(let chunk=0;chunk<requested/20;chunk++){
-   const slotStart=nextSequence+20*chunk;
-   const percent=slotStart<=140?50:75;
-   const next=generateBatch({count:20,bounds,eligible,
-    observations,existingPairs:currentPairs,batchIndex:Math.floor((slotStart-101)/20)+1,
-    seed:seed+"-"+chunk,adaptivePercent:percent});
-   requireCheck(next.pairs.length===20,"Sampling engine did not return 20 pairs");
-   for(const pair of next.pairs){
-    requireCheck(eligible(pair.A)&&eligible(pair.B)&&distance(pair.A,pair.B)<=60.97,
-     "Generated candidate fails geographic validation");
-    requestedRows.push({pairId:crypto.randomUUID(),mode:pair.mode,
-     longitudeA:pair.A[0],latitudeA:pair.A[1],
-     longitudeB:pair.B[0],latitudeB:pair.B[1],adaptivePercent:percent});
-    currentPairs.push({A:pair.A,B:pair.B});
-   }
+  for(const pair of next.pairs){
+   requireCheck(eligible(pair.A)&&eligible(pair.B)&&distance(pair.A,pair.B)<=60.97,
+    "Generated candidate fails geographic validation");
+   requestedRows.push({pairId:crypto.randomUUID(),mode:pair.mode,
+    longitudeA:pair.A[0],latitudeA:pair.A[1],
+    longitudeB:pair.B[0],latitudeB:pair.B[1],adaptivePercent:requestedPercent});
   }
   const orderA=randomizedOrder(requested);
   const orderB=randomizedOrder(requested);
@@ -203,10 +203,10 @@ Deno.serve(async req=>{
    p_request_id:requestId,
    p_expected_assignment_rows:assignments.length,
    p_expected_response_rows:responses.length,
-   p_seed:seed,p_pairs:requestedRows
+   p_seed:seed,p_adaptive_percent:requestedPercent,p_pairs:requestedRows
   });
   if(commitError)throw Error(commitError.message);
-  return reply({activated:true,addedPairs:result.addedPairs,
+  return reply({activated:true,addedPairs:result.addedPairs,adaptivePercent:requestedPercent,
    firstSequence:result.firstSequence,batchId:result.batchId,
    alreadyCommitted:result.alreadyCommitted});
  }catch(e){
