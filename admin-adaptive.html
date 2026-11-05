@@ -50,8 +50,28 @@ const client=globalThis.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_
  auth:{persistSession:true,autoRefreshToken:true}
 });
 let ready=false,busy=false;
+const pendingKey='liminal-admin-activation-request-v1';
+function readPending(){
+ try{
+  const p=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
+  if(p&&[20,40].includes(p.count)&&typeof p.requestId==='string')return p;
+ }catch(e){}
+ return null;
+}
+let pending=readPending();
+function rememberPending(p){
+ pending=p;
+ try{sessionStorage.setItem(pendingKey,JSON.stringify(p))}catch(e){}
+}
+function clearPending(){
+ pending=null;
+ try{sessionStorage.removeItem(pendingKey)}catch(e){}
+}
 function message(t){$('message').textContent=t}
-function buttons(){for(const n of [20,40])$('activate'+n).disabled=!ready||busy;$('refresh').disabled=busy}
+function buttons(){
+ for(const n of [20,40])$('activate'+n).disabled=!ready||busy||!!(pending&&pending.count!==n);
+ $('refresh').disabled=busy;
+}
 async function invoke(body){
  const {data:{user},error:loginError}=await client.auth.getUser();
  if(loginError||!user)throw Error('Sign in through the regular LiminalCreek app in this browser first.');
@@ -66,6 +86,11 @@ async function invoke(body){
 async function load(){
  busy=true;ready=false;buttons();message('Checking study administration…');
  try{
+  let confirmed=null;
+  if(pending){
+   const check=await invoke({action:'check',requestId:pending.requestId});
+   if(check.committed){confirmed=check;clearPending()}
+  }
   const {status:s}=await invoke({action:'status'});
   if(!s||!Array.isArray(s.participants))throw Error('Administrator status is not configured.');
   $('adminArea').hidden=false;
@@ -75,12 +100,18 @@ async function load(){
      ' (original: '+p.originalCompleted+' / 100)';
   }
   $('existing').textContent=String(s.additionalPairs);
-  $('mix').textContent=s.nextAdaptivePercent+'% response-informed / '+
-    (100-s.nextAdaptivePercent)+'% coverage-directed';
+  const cross=s.nextSequence===121;
+  $('mix').textContent=s.nextAdaptivePercent+'% adaptive for the next 20'+
+   (cross?'; a 40-location batch then uses 75% adaptive for its second 20':'');
   ready=!!s.canActivate;
   $('readiness').textContent=ready?'Ready':'Waiting for both participants to complete current assignments';
   $('readiness').className=ready?'good':'warning';
-  message(ready?'Administrator verified. You can activate 20 or 40 new locations each.':
+  if(confirmed)message('Confirmed: the earlier activation added '+confirmed.addedPairs+
+    ' pairs, starting at location '+confirmed.firstSequence+'. No duplicate was created.');
+  else if(pending)message('A previous '+pending.count+'-pair request is not yet confirmed. '+
+    (ready?'Select that same batch size to retry safely using its original request ID.':
+    'Current assignments are not all complete; refresh to verify the earlier outcome.'));
+  else message(ready?'Administrator verified. You can activate 20 or 40 new locations each.':
    'Administrator verified. Activation will be available when both queues are complete.');
  }catch(e){
   ready=false;$('adminArea').hidden=true;
@@ -88,18 +119,24 @@ async function load(){
  }finally{busy=false;buttons()}
 }
 async function activate(n){
- if(!ready||busy)return;
- // A unique request ID makes retries idempotent at the database boundary.
- const requestId=crypto.randomUUID();
+ if(!ready||busy||(pending&&pending.count!==n))return;
+ if(!pending){
+  if(!window.confirm('Generate and permanently add '+n+
+   ' matched pairs to BOTH participants? This does not reveal responses and cannot be undone in the app.'))return;
+  rememberPending({count:n,requestId:crypto.randomUUID()});
+ }
+ const requestId=pending.requestId;
  busy=true;buttons();message('Generating and validating '+n+' matched pairs…');
  try{
   const result=await invoke({action:'activate',count:n,requestId});
-  message('Activated '+result.addedPairs+' matched pairs, starting at location '+
-    result.firstSequence+'. Participants will receive them through the usual app.');
-  ready=false;
+  clearPending();ready=false;
   await load();
- }catch(e){message('No activation confirmed: '+(e instanceof Error?e.message:String(e))+
-  '\nIf the network was interrupted, refresh the status before trying again.');}
+  message('Activated '+result.addedPairs+' matched pairs, starting at location '+
+    result.firstSequence+'. Both participants will receive them through the usual app.');
+ }catch(e){
+  message('Activation outcome is unconfirmed: '+(e instanceof Error?e.message:String(e))+
+   '\nUse Refresh status to verify. If needed, the same-size button safely retries the ORIGINAL request.');
+ }
  finally{busy=false;buttons()}
 }
 $('refresh').onclick=load;
