@@ -209,7 +209,7 @@ INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
     OR (a.user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid AND a.sequence_no=120);
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
-DO $
+DO $$
 DECLARE m jsonb; result jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
@@ -224,7 +224,7 @@ BEGIN
    'synthetic-third-long-seed',50::smallint,m);
  IF (result->>'addedPairs')::integer<>10 OR (result->>'firstSequence')::integer<>161
  THEN RAISE EXCEPTION '10-pair activation failed'; END IF;
-END $;
+END $$;
 RESET ROLE;
 -- Start the 10-location set after completing the remaining 40 locations.
 INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
@@ -233,7 +233,7 @@ INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
     OR (a.user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid AND a.sequence_no BETWEEN 121 AND 160);
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
-DO $
+DO $$
 DECLARE m jsonb; result jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
@@ -248,9 +248,9 @@ BEGIN
    'synthetic-fourth-long-seed',75::smallint,m);
  IF (result->>'addedPairs')::integer<>30 OR (result->>'firstSequence')::integer<>171
  THEN RAISE EXCEPTION '30-pair activation failed'; END IF;
-END $;
+END $$;
 RESET ROLE;
-DO $
+DO $$
 BEGIN
  IF (SELECT count(*) FROM public.assignments)<>400 OR
     (SELECT count(*) FROM public.responses)<>321 OR
@@ -263,6 +263,6 @@ BEGIN
     SELECT md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id))
     FROM public.assignments a WHERE a.sequence_no<=100)
  THEN RAISE EXCEPTION 'Original assignments mutated'; END IF;
-END $;
+END $$;
 SELECT 'PASS: 10/20/30/40 early-queued batches, selectable 50/75 ratio, originals unchanged' AS result;
 
