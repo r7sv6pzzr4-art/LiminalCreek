@@ -1,6 +1,6 @@
-// DEVELOPMENT SAFETY GATE.
-// The admin page MUST NOT connect to the production Supabase project on this branch.
-// Leave these blank until using an isolated disposable Supabase staging project.
-// Only a separately reviewed, explicitly approved release may enable production.
-export const ADMIN_SUPABASE_URL = '';
+// STAGING ONLY. This development branch must NEVER connect to the live study.
+// Project reference explicitly supplied for the separate test project.
+// This page still fails closed until a STAGING publishable/anon API key is configured.
+// Never place a service_role key or database password in any browser code.
+export const ADMIN_SUPABASE_URL = 'https://mrelwvpixalfycfdarjf.supabase.co';
 export const ADMIN_SUPABASE_PUBLISHABLE_KEY = '';
