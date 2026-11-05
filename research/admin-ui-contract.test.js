@@ -4,6 +4,7 @@ const fs=require('node:fs'),vm=require('node:vm');
 const page=fs.readFileSync('admin-adaptive.html','utf8');
 const participant=fs.readFileSync('index.html','utf8');
 const server=fs.readFileSync('supabase/functions/liminal-auto-activate/index.ts','utf8');
+const config=fs.readFileSync('admin-adaptive-config.js','utf8');
 const sql=fs.readFileSync('research/drafts/auto-activation.DO-NOT-RUN.sql','utf8');
 
 test('administrator page has 20 and 40 options, with recoverable requests',()=>{
@@ -42,4 +43,12 @@ test('live collection functions are not altered by branch-only drafts',()=>{
  assert.match(sql,/DEVELOPMENT DRAFT ONLY/);
  assert.doesNotMatch(sql,/CREATE OR REPLACE FUNCTION public\.next_liminal_place/);
  assert.doesNotMatch(sql,/CREATE OR REPLACE FUNCTION public\.submit_impression/);
+});
+
+test('development administrator screen is disconnected from production by default',()=>{
+ assert.match(page,/\.\/admin-adaptive-config\.js/);
+ assert.doesNotMatch(page,/\.\/backend\/supabase-config\.js/);
+ assert.match(page,/if\(!client\)throw Error/);
+ assert.match(config,/ADMIN_SUPABASE_URL\s*=\s*''/);
+ assert.match(config,/ADMIN_SUPABASE_PUBLISHABLE_KEY\s*=\s*''/);
 });
