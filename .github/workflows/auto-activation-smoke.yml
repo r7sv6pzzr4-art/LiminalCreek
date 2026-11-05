@@ -1,0 +1,27 @@
+name: Isolated admin activation SQL smoke test
+on:
+  push:
+    branches: [shared-adaptive-integration-20261102]
+    paths:
+      - 'research/drafts/auto-activation.DO-NOT-RUN.sql'
+      - 'research/tests/auto-activation-smoke.sql'
+      - '.github/workflows/auto-activation-smoke.yml'
+  workflow_dispatch:
+jobs:
+  disposable-database:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify atomic activation in disposable PostgreSQL only
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name liminal-activation-test             -e POSTGRES_PASSWORD=temporary-test-only postgres:16
+          trap 'docker rm -f liminal-activation-test >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 40); do
+            if docker exec liminal-activation-test pg_isready -U postgres -q; then break; fi
+            sleep 1
+          done
+          docker exec -i liminal-activation-test psql -U postgres -d postgres             -v ON_ERROR_STOP=1 -X -f /dev/stdin < research/tests/auto-activation-smoke.sql
