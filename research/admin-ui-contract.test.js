@@ -79,6 +79,7 @@ test('staging participant preview never imports live project authentication',()=
  const stageAuth=fs.readFileSync('auth-staging.js','utf8');
  assert.match(stagingParticipant,/auth-staging.js/);
  assert.match(stageAuth,/mrelwvpixalfycfdarjf.supabase.co/);
+ assert.match(stageAuth,/Signed in: STAGING/);
  assert.doesNotMatch(stagingParticipant,/\.\/auth.js\?/);
  assert.doesNotMatch(stageAuth,/fwdsoluixqeycapncecl/);
  assert.doesNotMatch(stagingParticipant,/navigator.serviceWorker.register/);
