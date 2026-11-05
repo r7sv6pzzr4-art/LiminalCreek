@@ -153,10 +153,11 @@ INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
    (a.sequence_no BETWEEN 89 AND 100 OR a.sequence_no BETWEEN 101 AND 116))
  OR (a.user_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid AND
    a.sequence_no BETWEEN 101 AND 119);
-SET ROLE service_role;
-SET request.jwt.claim.role = 'service_role';
-DO $$
-DECLARE manifest jsonb; result jsonb; stat jsonb;
+SET ROLE authenticated;
+SET request.jwt.claim.role = 'authenticated';
+SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+DO $
+DECLARE stat jsonb;
 BEGIN
  stat:=public.liminal_admin_auto_status();
  IF (stat->>'canActivate')::boolean IS DISTINCT FROM true OR
@@ -164,6 +165,13 @@ BEGIN
   (stat->'participants'->0->>'currentSetCompleted')::integer<>16 OR
   (stat->'participants'->1->>'currentSetCompleted')::integer<>19
  THEN RAISE EXCEPTION 'Expected 16/20 and 19/20 partial-set readiness'; END IF;
+END $;
+RESET ROLE;
+SET ROLE service_role;
+SET request.jwt.claim.role = 'service_role';
+DO $
+DECLARE manifest jsonb; result jsonb;
+BEGIN
  SELECT jsonb_agg(jsonb_build_object(
   'pairId',gen_random_uuid(),'mode',CASE WHEN mod(n,4)=0 THEN 'broad' ELSE 'interesting' END,
   'longitudeA',-74.165+n*0.00005,'latitudeA',40.325,
