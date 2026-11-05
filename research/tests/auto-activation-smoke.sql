@@ -73,7 +73,7 @@ END $$;
 
 -- Admin may read status but cannot submit arbitrary coordinates directly.
 SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-DO $
+DO $$
 DECLARE stat jsonb;
 BEGIN
  stat:=public.liminal_admin_auto_status();
@@ -81,12 +81,12 @@ BEGIN
  THEN RAISE EXCEPTION 'Expected eligible full-original study'; END IF;
  IF has_function_privilege('authenticated','public.liminal_admin_commit_auto_batch(uuid,uuid,integer,integer,text,jsonb)','EXECUTE')
  THEN RAISE EXCEPTION 'Client may execute coordinate insertion RPC'; END IF;
-END $;
+END $$;
 RESET ROLE;
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
 -- Only trusted coordinator may commit a generated manifest.
-DO $
+DO $$
 DECLARE manifest jsonb; outcome jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
@@ -147,7 +147,7 @@ INSERT INTO public.responses(assignment_id,study_id,user_id,valence,strength)
  FROM public.assignments a WHERE a.sequence_no BETWEEN 101 AND 120;
 SET ROLE service_role;
 SET request.jwt.claim.role = 'service_role';
-DO $
+DO $$
 DECLARE manifest jsonb; result jsonb;
 BEGIN
  SELECT jsonb_agg(jsonb_build_object(
