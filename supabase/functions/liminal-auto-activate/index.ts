@@ -98,12 +98,27 @@ Deno.serve(async req=>{
    if(error)throw Error(error.message);
    return reply({status:data});
   }
-  if(payload?.action!=="activate")return fail("Unknown action",400);
+  if(payload?.action!=="activate"&&payload?.action!=="check")
+   return fail("Unknown action",400);
+  const requestId=String(payload.requestId||"");
+  if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestId))
+   return fail("Invalid activation ID",400);
+  // A prior committed request must be recognized even if today's assignment
+  // queue is no longer ready. This prevents duplicate creation on lost replies.
+  const {data:prior,error:priorError}=await admin.from("liminal_auto_batches")
+   .select("id,pair_count,first_sequence").eq("study_id",membership.study_id)
+   .eq("request_id",requestId).maybeSingle();
+  if(priorError)throw Error("Could not verify previous activation");
+  if(payload.action==="check")
+   return reply({committed:!!prior,addedPairs:prior?.pair_count||0,
+    firstSequence:prior?.first_sequence||null,batchId:prior?.id||null});
   const requested=payload.count;
   if(requested!==20&&requested!==40)return fail("Choose 20 or 40 pairs",400);
-  const requestId=String(payload.requestId||"");
-  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))
-   return fail("Invalid activation ID",400);
+  if(prior){
+   if(prior.pair_count!==requested)return fail("Request ID already used with another batch size",409);
+   return reply({activated:true,alreadyCommitted:true,addedPairs:prior.pair_count,
+    firstSequence:prior.first_sequence,batchId:prior.id});
+  }
   const {data:status,error:statusError}=await caller.rpc("liminal_admin_auto_status");
   if(statusError||!status?.canActivate)return fail(
    "Both participants must finish all currently assigned locations before activation");
