@@ -20,7 +20,7 @@ BEGIN
  WHERE started_at IS NOT NULL AND revealed_at IS NULL;
  IF (SELECT count(*) FROM public.participants p WHERE p.study_id=live_sid)<>2
  OR (SELECT count(*) FROM public.participants p
-     WHERE p.study_id=live_sid AND p.is_admin)=0
+     WHERE p.study_id=live_sid AND p.is_admin)<>1
  THEN RAISE EXCEPTION 'STOP: Live participant/administrator roster differs'; END IF;
  IF (SELECT count(*) FROM public.assignments a WHERE a.study_id=live_sid)<>200
  OR (SELECT count(DISTINCT a.pair_id) FROM public.assignments a
@@ -47,7 +47,7 @@ BEGIN
  OR to_regprocedure('public.liminal_admin_auto_status()') IS NOT NULL
  OR to_regprocedure('public.liminal_my_progress()') IS NOT NULL
  THEN RAISE EXCEPTION 'STOP: Adaptive migration already exists; reconcile before retry'; END IF;
- IF (SELECT polygons->>'type' FROM public.studies WHERE id=live_sid)
+ IF coalesce((SELECT polygons->>'type' FROM public.studies WHERE id=live_sid),'')
     NOT IN ('FeatureCollection','Feature','Polygon','MultiPolygon')
  THEN RAISE EXCEPTION 'STOP: Unsupported active study polygon geometry'; END IF;
 END
