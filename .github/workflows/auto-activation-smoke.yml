@@ -4,6 +4,7 @@ on:
     branches: [shared-adaptive-integration-20261102]
     paths:
       - 'research/drafts/auto-activation.DO-NOT-RUN.sql'
+      - 'release/production-adaptive-migration.REVIEW-ONLY.sql'
       - 'research/tests/auto-activation-smoke.sql'
       - '.github/workflows/auto-activation-smoke.yml'
   workflow_dispatch:
@@ -19,10 +20,12 @@ jobs:
         run: |
           set -euo pipefail
           docker run -d --name liminal-activation-test             -e POSTGRES_PASSWORD=temporary-test-only \
-            -v "$PWD/research:/app/research:ro" postgres:16
+            -v "$PWD/research:/app/research:ro" -v "$PWD/release:/app/release:ro" postgres:16
           trap 'docker rm -f liminal-activation-test >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 40); do
             if docker exec liminal-activation-test pg_isready -U postgres -q; then break; fi
             sleep 1
           done
           docker exec liminal-activation-test psql -U postgres -d postgres -X -v ON_ERROR_STOP=1 -f /app/research/tests/auto-activation-smoke.sql
+          docker exec liminal-activation-test createdb -U postgres production_review
+          docker exec liminal-activation-test psql -U postgres -d production_review -X -v ON_ERROR_STOP=1 -v PRODUCTION_MIGRATION=1 -f /app/research/tests/auto-activation-smoke.sql
