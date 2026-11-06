@@ -12,7 +12,7 @@ GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 CREATE TABLE public.studies (
  id uuid primary key,created_at timestamptz default now(),
- started_at timestamptz,revealed_at timestamptz
+ started_at timestamptz,revealed_at timestamptz,polygons jsonb
 );
 CREATE TABLE public.participants (
  study_id uuid not null,user_id uuid not null,
@@ -34,8 +34,18 @@ CREATE TABLE public.responses (
 ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.participants ENABLE ROW LEVEL SECURITY;
-INSERT INTO public.studies(id,started_at) VALUES
- ('11111111-1111-4111-8111-111111111111',now());
+INSERT INTO public.studies(id,started_at,polygons) VALUES
+ ('11111111-1111-4111-8111-111111111111',now(),jsonb_build_object(
+   'type','FeatureCollection','features',jsonb_build_array(
+    jsonb_build_object('type','Feature','geometry',jsonb_build_object(
+     'type','Polygon','coordinates',jsonb_build_array(jsonb_build_array(
+      jsonb_build_array(-74.19,40.30),jsonb_build_array(-74.14,40.30),
+      jsonb_build_array(-74.14,40.35),jsonb_build_array(-74.19,40.35),
+      jsonb_build_array(-74.19,40.30)
+     ))
+    ))
+   )
+ ));
 INSERT INTO public.participants(study_id,user_id,display_name,is_admin) VALUES
  ('11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Admin',true),
  ('11111111-1111-4111-8111-111111111111'::uuid,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid,'Brother',false);
@@ -56,7 +66,11 @@ CREATE TEMP TABLE original_hash AS SELECT
  md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id)) as hash
  FROM public.assignments a WHERE sequence_no<=100;
 
+\if :{?PRODUCTION_MIGRATION}
+\ir ../../release/production-adaptive-migration.REVIEW-ONLY.sql
+\else
 \ir ../drafts/auto-activation.DO-NOT-RUN.sql
+\endif
 
 -- Authenticated member without administrator role must not receive status.
 SET ROLE authenticated;
