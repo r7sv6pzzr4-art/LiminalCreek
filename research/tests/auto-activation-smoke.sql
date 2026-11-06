@@ -73,6 +73,9 @@ CREATE TEMP TABLE original_hash AS SELECT
  md5(string_agg(row_to_json(a)::text,'' ORDER BY a.id)) as hash
  FROM public.assignments a WHERE sequence_no<=100;
 
+-- Test that the safe, aggregate-only production inventory parses on the fixture.
+\ir ../../release/live-readiness-inventory.READ-ONLY.sql
+
 \if :{?PRODUCTION_MIGRATION}
 \ir ../../release/production-adaptive-migration.REVIEW-ONLY.sql
 \else
