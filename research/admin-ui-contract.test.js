@@ -85,3 +85,29 @@ test('staging participant preview never imports live project authentication',()=
  assert.doesNotMatch(stagingParticipant,/navigator.serviceWorker.register/);
  assert.match(stagingParticipant,/ARTIFICIAL RECTANGULAR STUDY AREA/);
 });
+
+
+test('production admin template is disabled and has no staging sign-in',()=>{
+ const prod=fs.readFileSync('release/production-admin.READY-FOR-REVIEW.html','utf8');
+ assert.match(prod,/PROD_DEPLOYMENT_ENABLED=false/);
+ assert.match(prod,/\.\/backend\/supabase-config\.js/);
+ assert.match(prod,/getUser\(\)/);
+ assert.match(prod,/adminArea/);
+ assert.match(prod,/id="pairCount"/);
+ assert.match(prod,/id="adaptivePercent"/);
+ assert.doesNotMatch(prod,/mrelwvpixalfycfdarjf/);
+ assert.doesNotMatch(prod,/stagingPassword|stagingSignIn|ADMIN_SUPABASE_URL/);
+ const code=prod.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+ assert(code,'Expected production admin module');
+ new vm.Script(code.replace(/^import\s+.*;\s*$/m,''),{filename:'release/production-admin.html'});
+});
+test('release SQL is additive, guarded and cannot replace existing collection RPCs',()=>{
+ const migration=fs.readFileSync('release/production-adaptive-migration.REVIEW-ONLY.sql','utf8');
+ assert.match(migration,/STOP: Original 200 assignments/);
+ assert.match(migration,/CREATE OR REPLACE FUNCTION public.liminal_my_progress\(\)/);
+ assert.match(migration,/CREATE OR REPLACE FUNCTION public.liminal_admin_commit_auto_batch/);
+ assert.doesNotMatch(migration,/CREATE OR REPLACE FUNCTION public.next_liminal_place/);
+ assert.doesNotMatch(migration,/CREATE OR REPLACE FUNCTION public.submit_impression/);
+ assert.doesNotMatch(migration,/DELETE FROM public\.(assignments|responses)/);
+ assert.doesNotMatch(migration,/TRUNCATE|DROP TABLE/);
+});
