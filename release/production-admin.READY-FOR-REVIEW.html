@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek · Study administration</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#e9ede5;background:#142b27}
+*{box-sizing:border-box}body{margin:0}main{max-width:690px;margin:5vh auto;padding:20px}
+h1,h2{font-family:Georgia,serif}h1{font-size:1.65rem}
+.panel{padding:20px;border:1px solid #4e705c;border-radius:15px;background:#203b33;margin:15px 0}
+button{font:inherit;border:1px solid #789387;border-radius:10px;background:#31574a;color:white;padding:12px;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+input{font:inherit;width:100%;padding:11px;color:#e9ede5;background:#142d24;border:1px solid #789387;border-radius:10px}
+.authActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
+select{width:100%;padding:11px;background:#142d24;color:#e9ede5;border:1px solid #789387;border-radius:10px;font:inherit}
+label{display:block;margin:12px 0 7px;font-weight:600}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:560px){.formgrid{grid-template-columns:1fr}}
+#setProgress{font-size:.92rem;color:#c9dbcc}
+button#activate{width:100%;margin-top:16px;text-align:center}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions button{text-align:left;line-height:1.5}
+.actions strong{font-size:1.7rem;display:block}
+.small{font-size:.87rem;color:#b3c8ba}
+.good{color:#b9e1b7}.warning{color:#ffd29d}
+#message{white-space:pre-wrap}
+dl{display:grid;grid-template-columns:1fr auto;gap:10px}dt,dd{margin:0}
+a{color:#d0e9d2}button#refresh{padding:7px 12px}
+[hidden]{display:none!important}
+</style></head>
+<body><main>
+<h1>LiminalCreek · Study administration</h1>
+<p class="small">Private control for the two-participant shared study. Only the authorized administrator can activate additional locations.</p>
+<p class="small"><a href="./index.html">Return to LiminalCreek</a> · Administrator privileges are verified on the server.</p>
+<section class="panel"><h2>Authorization</h2><p id="message" aria-live="polite">Checking your existing LiminalCreek session…</p><button id="refresh">Refresh status</button></section>
+<div id="adminArea" hidden>
+<section class="panel"><h2>Current shared-study progress</h2>
+<dl>
+<dt id="labelCurrentA">Participant A — current set</dt><dd id="currentA">—</dd>
+<dt id="labelCurrentB">Participant B — current set</dt><dd id="currentB">—</dd>
+<dt id="labelTotalA">Participant A — total completed / assigned</dt><dd id="progressA">—</dd>
+<dt id="labelTotalB">Participant B — total completed / assigned</dt><dd id="progressB">—</dd>
+<dt>Additional matched pairs already assigned</dt><dd id="existing">—</dd>
+<dt>Responses available to the engine</dt><dd id="observed">—</dd>
+<dt>Activation readiness</dt><dd id="readiness">—</dd>
+</dl><p class="small">A and B are internal participant labels, not names.</p></section>
+<section class="panel"><h2>Activate new locations</h2>
+<p>Generate and add an upcoming batch now, even when a current set is not finished. Only submitted responses inform the adaptive part; unfinished locations are not treated as neutral.</p>
+<div class="formgrid">
+<div><label for="pairCount">New matched pairs</label><select id="pairCount">
+<option value="10">10 pairs</option><option value="20" selected>20 pairs</option>
+<option value="30">30 pairs</option><option value="40">40 pairs</option>
+</select></div>
+<div><label for="adaptivePercent">Adaptive sampling mixture</label><select id="adaptivePercent">
+<option value="50">50% response-informed / 50% coverage</option>
+<option value="75">75% response-informed / 25% coverage</option>
+</select></div>
+</div>
+<button id="activate" disabled>Generate and add selected pairs</button>
+<p class="small">A batch is appended after the locations already assigned to each participant. Each receives one location per pair, in independently randomized order. To avoid accidentally stacking work, an unstarted future batch prevents another activation.</p>
+<p class="warning">Adding a batch permanently appends new assignments for both participants. No existing assignments or submitted impressions are modified.</p>
+</section></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script type="module">
+import {SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY} from './backend/supabase-config.js';
+const $=id=>document.getElementById(id);
+// Release engineer must explicitly change this to true only in the reviewed
+// production artifact AFTER approval; draft always fails closed.
+const PROD_DEPLOYMENT_ENABLED=false;
+const VERIFIED_LIVE_URL='https://fwdsoluixqeycapncecl.supabase.co';
+let client=null;
+if(PROD_DEPLOYMENT_ENABLED &&
+    SUPABASE_URL===VERIFIED_LIVE_URL &&
+    /^sb_publishable_[A-Za-z0-9_-]+$/.test(SUPABASE_PUBLISHABLE_KEY) &&
+    globalThis.supabase?.createClient){
+ client=globalThis.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+ });
+}
+let ready=false,busy=false,selectionChanged=false,lastStatus=null;
+const pendingKey='liminal-admin-activation-request-v2';
+function readPending(){
+ try{
+  const p=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
+  if(p&&[10,20,30,40].includes(p.count)&&[50,75].includes(p.adaptivePercent)&&
+     typeof p.requestId==='string')return p;
+ }catch(e){}
+ return null;
+}
+let pending=readPending();
+function rememberPending(p){
+ pending=p;
+ try{sessionStorage.setItem(pendingKey,JSON.stringify(p))}catch(e){}
+}
+function clearPending(){
+ pending=null;
+ try{sessionStorage.removeItem(pendingKey)}catch(e){}
+}
+function message(t){$('message').textContent=t}
+function buttons(){
+ $('activate').disabled=!ready||busy;
+ $('pairCount').disabled=busy||!!pending;
+ $('adaptivePercent').disabled=busy||!!pending;
+ $('refresh').disabled=busy;
+}
+async function invoke(body){
+ if(!client)throw Error('Development administration is disconnected. Configure an isolated staging project.');
+ const {data:{user},error:loginError}=await client.auth.getUser();
+ if(loginError||!user)throw Error('Sign in through the regular LiminalCreek app in this browser first.');
+ const {data,error}=await client.functions.invoke('liminal-auto-activate',{body});
+ if(error){
+  const payload=await error.context?.json?.().catch(()=>null);
+  throw Error(payload?.error||error.message||'Server request failed');
+ }
+ if(data?.error)throw Error(data.error);
+ return data;
+}
+function showStatus(s){
+ lastStatus=s;
+ if(!s||!Array.isArray(s.participants))throw Error('Administrator status is not configured.');
+ $('adminArea').hidden=false;
+ for(const p of s.participants){
+  const total=$('progress'+p.role),current=$('current'+p.role);
+  const who=p.isYou?'You':'Other participant';
+  const labelCurrent=$('labelCurrent'+p.role),labelTotal=$('labelTotal'+p.role);
+  if(labelCurrent)labelCurrent.textContent=who+' — current set';
+  if(labelTotal)labelTotal.textContent=who+' — total completed / assigned';
+  if(total)total.textContent=p.completed+' / '+p.assigned;
+  if(current)current.textContent=p.currentSetCompleted+' / '+p.currentSetSize+
+    ' (locations '+p.currentSetStart+'–'+(p.currentSetStart+p.currentSetSize-1)+')';
+ }
+ $('existing').textContent=String(s.additionalPairs);
+ $('observed').textContent=String(s.responseRows);
+ if(!selectionChanged&&!pending)
+  $('adaptivePercent').value=String(s.recommendedAdaptivePercent);
+ ready=!!s.canActivate;
+ $('readiness').textContent=ready?'Ready to add upcoming locations':
+   s.unstartedBatchQueued?'An upcoming batch is already queued':
+   'Study assignment inventory is not yet ready';
+ $('readiness').className=ready?'good':'warning';
+}
+async function load(){
+ busy=true;ready=false;buttons();message('Checking study administration…');
+ try{
+  let confirmed=null;
+  if(pending){
+   const check=await invoke({action:'check',requestId:pending.requestId});
+   if(check.committed){confirmed=check;clearPending()}
+  }
+  const {status:s}=await invoke({action:'status'});
+  showStatus(s);
+  if(confirmed)message('Confirmed: the earlier request added '+confirmed.addedPairs+
+    ' pairs, beginning at location '+confirmed.firstSequence+'. No duplicate was created.');
+  else if(pending){
+   $('pairCount').value=String(pending.count);
+   $('adaptivePercent').value=String(pending.adaptivePercent);
+   message('A previous activation is not yet confirmed. Use Refresh to verify; '+
+    (ready?'the same button will retry the original request safely.':
+     'a batch may still be processing.'));
+  }else message(ready?'Administrator verified. You can append locations before either current set is finished.':
+   s.unstartedBatchQueued?'One future batch is already in the queue. Let one participant begin it before adding another.':
+   'Administrator verified. Activation is unavailable until the study inventory is valid.');
+ }catch(e){
+  ready=false;$('adminArea').hidden=true;
+  message(e instanceof Error?e.message:'Unable to load administrator status');
+ }finally{busy=false;buttons()}
+}
+async function activate(){
+ if(!ready||busy)return;
+ const count=Number($('pairCount').value);
+ const adaptivePercent=Number($('adaptivePercent').value);
+ if(![10,20,30,40].includes(count)||![50,75].includes(adaptivePercent))return;
+ if(!pending){
+  const completed=lastStatus?.participants?.map(p=>p.role+': '+p.completed).join(', ')||'unavailable';
+  if(!window.confirm('Generate and append '+count+' new paired locations to BOTH participants using '+
+    adaptivePercent+'% adaptive sampling?\nResponses currently submitted: '+
+    completed+'.\nExisting locations will remain in order.'))return;
+  rememberPending({count,adaptivePercent,requestId:crypto.randomUUID()});
+ }
+ const requestId=pending.requestId;
+ busy=true;buttons();message('Generating '+count+' matched pairs from submitted responses…');
+ try{
+  const result=await invoke({action:'activate',count,adaptivePercent,requestId});
+  clearPending();ready=false;
+  await load();
+  message('Added '+result.addedPairs+' pairs at locations '+result.firstSequence+'–'+
+   (result.firstSequence+result.addedPairs-1)+
+   '. The current unfinished assignments remain first in each queue.');
+ }catch(e){
+  message('Activation outcome is unconfirmed: '+(e instanceof Error?e.message:String(e))+
+   '\nUse Refresh status before trying again. The same request ID prevents duplicates.');
+ }finally{busy=false;buttons()}
+}
+$('pairCount').addEventListener('change',()=>{selectionChanged=true});
+$('adaptivePercent').addEventListener('change',()=>{selectionChanged=true});
+$('refresh').onclick=load;
+$('activate').onclick=activate;
+
+
+$('refresh').disabled=true;
+if(!PROD_DEPLOYMENT_ENABLED){
+ message('Release preview disabled. No connection to the live study. This page can only be enabled in a separately approved production deployment.');
+}else if(!client){
+ message('Live project configuration mismatch; administration is disabled.');
+}else{
+ client.auth.getUser().then(({data:{user},error})=>{
+  if(error||!user){
+   message('Sign in through the normal LiminalCreek app first, then return here.');
+   return;
+  }
+  load();
+ }).catch(()=>message('Unable to verify your existing study session. Sign in through the normal app.'));
+}
+
+</script></body></html>
