@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LiminalCreek · Study administration</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#e9ede5;background:#142b27}
+*{box-sizing:border-box}body{margin:0}main{max-width:690px;margin:5vh auto;padding:20px}
+h1,h2{font-family:Georgia,serif}h1{font-size:1.65rem}
+.panel{padding:20px;border:1px solid #4e705c;border-radius:15px;background:#203b33;margin:15px 0}
+button{font:inherit;border:1px solid #789387;border-radius:10px;background:#31574a;color:white;padding:12px;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+input{font:inherit;width:100%;padding:11px;color:#e9ede5;background:#142d24;border:1px solid #789387;border-radius:10px}
+.authActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
+select{width:100%;padding:11px;background:#142d24;color:#e9ede5;border:1px solid #789387;border-radius:10px;font:inherit}
+label{display:block;margin:12px 0 7px;font-weight:600}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:560px){.formgrid{grid-template-columns:1fr}}
+#setProgress{font-size:.92rem;color:#c9dbcc}
+button#activate{width:100%;margin-top:16px;text-align:center}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions button{text-align:left;line-height:1.5}
+.actions strong{font-size:1.7rem;display:block}
+.small{font-size:.87rem;color:#b3c8ba}
+.good{color:#b9e1b7}.warning{color:#ffd29d}
+#message{white-space:pre-wrap}
+#focusStatus{margin-top:10px}
+input[type=file]{font-size:.93rem}
+#focusActivate{width:100%;margin-top:12px}
+dl{display:grid;grid-template-columns:1fr auto;gap:10px}dt,dd{margin:0}
+a{color:#d0e9d2}button#refresh{padding:7px 12px}
+[hidden]{display:none!important}
+</style></head>
+<body><main>
+<h1>LiminalCreek · FINAL FOCUS STAGING</h1>
+<p class="small">Private control for the two-participant shared study. Only the authorized administrator can activate additional locations.</p>
+<p class="small"><a href="./index.html">Return to LiminalCreek</a> · Administrator privileges are verified on the server.</p>
+<section class="panel" id="stageLoginPanel"><h2>Synthetic staging sign-in</h2>
+<p class="warning">STAGING ONLY — not the active two-person study. Upload only the synthetic focus-area test file supplied with this branch.</p>
+<label for="stageKey">Staging project publishable key</label>
+<input type="text" id="stageKey" placeholder="sb_publishable_…" autocomplete="off" spellcheck="false">
+<label for="stagePassword">staging-admin@example.invalid password</label>
+<input type="password" id="stagePassword" autocomplete="off">
+<button id="stageLogin" type="button">Sign in to isolated staging</button>
+<p class="small" id="stageMessage" aria-live="polite">No live-study credentials are needed.</p>
+</section>
+<section class="panel"><h2>Authorization</h2><p id="message" aria-live="polite">Checking your existing LiminalCreek session…</p><button id="refresh">Refresh status</button></section>
+<div id="adminArea" hidden>
+<section class="panel"><h2>Current shared-study progress</h2>
+<dl>
+<dt id="labelCurrentA">Participant A — current set</dt><dd id="currentA">—</dd>
+<dt id="labelCurrentB">Participant B — current set</dt><dd id="currentB">—</dd>
+<dt id="labelTotalA">Participant A — total completed / assigned</dt><dd id="progressA">—</dd>
+<dt id="labelTotalB">Participant B — total completed / assigned</dt><dd id="progressB">—</dd>
+<dt>Additional matched pairs already assigned</dt><dd id="existing">—</dd>
+<dt>Responses available to the engine</dt><dd id="observed">—</dd>
+<dt>Activation readiness</dt><dd id="readiness">—</dd>
+</dl><p class="small">A and B are internal participant labels, not names.</p></section>
+<section class="panel"><h2>Activate new locations</h2>
+<p>Generate and add an upcoming batch now, even when a current set is not finished. Only submitted responses inform the adaptive part; unfinished locations are not treated as neutral.</p>
+<div class="formgrid">
+<div><label for="pairCount">New matched pairs</label><select id="pairCount">
+<option value="10">10 pairs</option><option value="20" selected>20 pairs</option>
+<option value="30">30 pairs</option><option value="40">40 pairs</option>
+</select></div>
+<div><label for="adaptivePercent">Adaptive sampling mixture</label><select id="adaptivePercent">
+<option value="50">50% response-informed / 50% coverage</option>
+<option value="75">75% response-informed / 25% coverage</option>
+</select></div>
+</div>
+<button id="activate" disabled>Generate and add selected pairs</button>
+<p class="small">A batch is appended after the locations already assigned to each participant. Each receives one location per pair, in independently randomized order. To avoid accidentally stacking work, an unstarted future batch prevents another activation.</p>
+<p class="warning">Adding a batch permanently appends new assignments for both participants. No existing assignments or submitted impressions are modified.</p>
+</section>
+<section class="panel" id="finalFocusPanel"><h2>Final focused batch</h2>
+<p>For the last sampling round before the reveal, generate <strong>20 randomly spaced matched pairs</strong>: 10 in each of two administrator-supplied polygons. This is response-blind and separate from the adaptive ratios above.</p>
+<label for="focusFile">Two-area export from the old LiminalCreek prototype (.json or .geojson)</label>
+<input type="file" id="focusFile" accept=".json,.geojson,application/json"/>
+<p id="focusStatus" class="small" aria-live="polite">No area file selected. Your file is not uploaded until you explicitly activate the final batch.</p>
+<button id="focusActivate" disabled>Generate and add FINAL 20 matched pairs</button>
+<p class="warning">Final means final: once successfully added, the system will refuse all further batches. Existing answers remain blinded; revealing results remains a separate decision. Do not activate until you are ready for this to be the last set.</p>
+</section></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script type="module">
+const $=id=>document.getElementById(id);
+const STAGING_URL='https://mrelwvpixalfycfdarjf.supabase.co';
+let client=null;
+let ready=false,busy=false,selectionChanged=false,lastStatus=null;
+const pendingKey='liminal-staging-final-focused-activation-v1';
+function readPending(){
+ try{
+  const p=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
+  if(p&&typeof p.requestId==='string'&&(
+     (p.type==='focused'&&p.count===20&&p.adaptivePercent===0&&typeof p.focusDigest==='string') ||
+     ((!p.type||p.type==='adaptive')&&[10,20,30,40].includes(p.count)&&[50,75].includes(p.adaptivePercent))
+    ))return p;
+ }catch(e){}
+ return null;
+}
+let pending=readPending();
+let focusPolygons=null,focusDigest=null;
+function rememberPending(p){
+ pending=p;
+ try{sessionStorage.setItem(pendingKey,JSON.stringify(p))}catch(e){}
+}
+function clearPending(){
+ pending=null;
+ try{sessionStorage.removeItem(pendingKey)}catch(e){}
+}
+function message(t){$('message').textContent=t}
+function buttons(){
+ $('activate').disabled=!ready||busy||(pending?.type==='focused');
+ $('focusActivate').disabled=!ready||busy||!focusPolygons||
+   (pending?.type&&pending.type!=='focused')||!!lastStatus?.finalFocused;
+ $('focusFile').disabled=busy;
+ $('pairCount').disabled=busy||!!pending;
+ $('adaptivePercent').disabled=busy||!!pending;
+ $('refresh').disabled=busy;
+}
+async function invoke(body){
+ if(!client)throw Error('Development administration is disconnected. Configure an isolated staging project.');
+ const {data:{user},error:loginError}=await client.auth.getUser();
+ if(loginError||!user)throw Error('Sign in through the regular LiminalCreek app in this browser first.');
+ const {data,error}=await client.functions.invoke('liminal-auto-activate',{body});
+ if(error){
+  const payload=await error.context?.json?.().catch(()=>null);
+  throw Error(payload?.error||error.message||'Server request failed');
+ }
+ if(data?.error)throw Error(data.error);
+ return data;
+}
+function showStatus(s){
+ lastStatus=s;
+ if(!s||!Array.isArray(s.participants))throw Error('Administrator status is not configured.');
+ $('adminArea').hidden=false;
+ for(const p of s.participants){
+  const total=$('progress'+p.role),current=$('current'+p.role);
+  const who=p.isYou?'You':'Other participant';
+  const labelCurrent=$('labelCurrent'+p.role),labelTotal=$('labelTotal'+p.role);
+  if(labelCurrent)labelCurrent.textContent=who+' — current set';
+  if(labelTotal)labelTotal.textContent=who+' — total completed / assigned';
+  if(total)total.textContent=p.completed+' / '+p.assigned;
+  if(current)current.textContent=p.currentSetCompleted+' / '+p.currentSetSize+
+    ' (locations '+p.currentSetStart+'–'+(p.currentSetStart+p.currentSetSize-1)+')';
+ }
+ $('existing').textContent=String(s.additionalPairs);
+ $('observed').textContent=String(s.responseRows);
+ if(!selectionChanged&&!pending)
+  $('adaptivePercent').value=String(s.recommendedAdaptivePercent);
+ ready=!!s.canActivate;
+ $('readiness').textContent=ready?'Ready to add upcoming locations':
+   s.finalFocused?'Final focused batch already assigned; no more batches permitted':
+   s.unstartedBatchQueued?'An upcoming batch is already queued':
+   'Study assignment inventory is not yet ready';
+ $('readiness').className=ready?'good':'warning';
+}
+async function load(){
+ busy=true;ready=false;buttons();message('Checking study administration…');
+ try{
+  let confirmed=null;
+  if(pending){
+   const check=await invoke({action:'check',requestId:pending.requestId});
+   if(check.committed){confirmed=check;clearPending()}
+  }
+  const {status:s}=await invoke({action:'status'});
+  showStatus(s);
+  if(confirmed)message('Confirmed: the earlier request added '+confirmed.addedPairs+
+    ' pairs, beginning at location '+confirmed.firstSequence+'. No duplicate was created.');
+  else if(pending?.type==='focused'){
+   message('A final-focused activation is not confirmed. Use Refresh to verify. '+
+    'If retrying after a network error, select the same two-area export again.');
+  }else if(pending){
+   $('pairCount').value=String(pending.count);
+   $('adaptivePercent').value=String(pending.adaptivePercent);
+   message('A previous activation is not yet confirmed. Use Refresh to verify; '+
+    (ready?'the same button will retry the original request safely.':
+     'a batch may still be processing.'));
+  }else message(ready?'Administrator verified. You can append locations before either current set is finished.':
+   s.finalFocused?'The final focused batch has been assigned. No further additions are allowed.':
+   s.unstartedBatchQueued?'One future batch is already in the queue. Let one participant begin it before adding another.':
+   'Administrator verified. Activation is unavailable until the study inventory is valid.');
+ }catch(e){
+  ready=false;$('adminArea').hidden=true;
+  message(e instanceof Error?e.message:'Unable to load administrator status');
+ }finally{busy=false;buttons()}
+}
+async function activate(){
+ if(!ready||busy)return;
+ const count=Number($('pairCount').value);
+ const adaptivePercent=Number($('adaptivePercent').value);
+ if(![10,20,30,40].includes(count)||![50,75].includes(adaptivePercent))return;
+ if(!pending){
+  const completed=lastStatus?.participants?.map(p=>p.role+': '+p.completed).join(', ')||'unavailable';
+  if(!window.confirm('Generate and append '+count+' new paired locations to BOTH participants using '+
+    adaptivePercent+'% adaptive sampling?\nResponses currently submitted: '+
+    completed+'.\nExisting locations will remain in order.'))return;
+  rememberPending({type:'adaptive',count,adaptivePercent,requestId:crypto.randomUUID()});
+ }
+ const requestId=pending.requestId;
+ busy=true;buttons();message('Generating '+count+' matched pairs from submitted responses…');
+ try{
+  const result=await invoke({action:'activate',count,adaptivePercent,requestId});
+  clearPending();ready=false;
+  await load();
+  message('Added '+result.addedPairs+' pairs at locations '+result.firstSequence+'–'+
+   (result.firstSequence+result.addedPairs-1)+
+   '. The current unfinished assignments remain first in each queue.');
+ }catch(e){
+  message('Activation outcome is unconfirmed: '+(e instanceof Error?e.message:String(e))+
+   '\nUse Refresh status before trying again. The same request ID prevents duplicates.');
+ }finally{busy=false;buttons()}
+}
+$('pairCount').addEventListener('change',()=>{selectionChanged=true});
+$('adaptivePercent').addEventListener('change',()=>{selectionChanged=true});
+
+function normalizeFocusExport(raw){
+ const source=raw?.polygons||raw;
+ if(source?.type!=='FeatureCollection'||!Array.isArray(source.features)||
+    source.features.length!==2)throw Error('The file must define exactly two polygon features.');
+ const features=source.features.map((f,i)=>{
+  const g=f?.geometry;
+  if(g?.type!=='Polygon'||!Array.isArray(g.coordinates)||g.coordinates.length!==1)
+   throw Error('Focus area '+(i+1)+' must be a single simple polygon.');
+  const ring=g.coordinates[0];
+  if(!Array.isArray(ring)||ring.length<4||ring.length>250||
+     !ring.every(p=>Array.isArray(p)&&p.length===2&&
+       p.every(Number.isFinite)&&p[0]>=-180&&p[0]<=180&&p[1]>=-90&&p[1]<=90))
+   throw Error('Focus area '+(i+1)+' contains invalid coordinates.');
+  if(ring[0][0]!==ring.at(-1)[0]||ring[0][1]!==ring.at(-1)[1])
+   throw Error('Focus area '+(i+1)+' is not a closed polygon.');
+  return {type:'Feature',properties:{},
+          geometry:{type:'Polygon',coordinates:[ring]}};
+ });
+ return {type:'FeatureCollection',features};
+}
+$('focusFile').addEventListener('change',async()=>{
+ focusPolygons=null;focusDigest=null;buttons();
+ const file=$('focusFile').files?.[0];
+ if(!file){$('focusStatus').textContent='No focus-area file selected.';return}
+ if(file.size>120000){$('focusStatus').textContent='File is too large for a two-polygon export.';return}
+ try{
+  const parsed=normalizeFocusExport(JSON.parse(await file.text()));
+  const bytes=new TextEncoder().encode(JSON.stringify(parsed));
+  const sha=await crypto.subtle.digest('SHA-256',bytes);
+  focusDigest=Array.from(new Uint8Array(sha)).map(n=>n.toString(16).padStart(2,'0')).join('');
+  if(pending?.type==='focused'&&pending.focusDigest!==focusDigest)
+   throw Error('A previous final activation is pending. Re-select the same export before retrying.');
+  focusPolygons=parsed;
+  $('focusStatus').textContent='Two focus areas validated (10 pairs in each). '+
+   'The engine will check official boundaries and avoid previous assignments at activation.';
+ }catch(e){$('focusStatus').textContent='Cannot use file: '+(e?.message||String(e))}
+ buttons();
+});
+async function activateFocused(){
+ if(!ready||busy||!focusPolygons||lastStatus?.finalFocused)return;
+ if(!pending){
+  if(!window.confirm('FINAL STUDY BATCH: Generate 20 new matched pairs, '+
+   '10 randomly spaced inside each selected focus polygon, and append them '+
+   'to BOTH participants? Future batch activation will be permanently disabled. '+
+   'Submitted impressions will stay private until a separate reveal action.'))return;
+  rememberPending({type:'focused',count:20,adaptivePercent:0,focusDigest,requestId:crypto.randomUUID()});
+ }
+ if(pending.type!=='focused'||pending.focusDigest!==focusDigest){
+  message('Another activation is pending, or the focus area file has changed. Refresh first.');return;
+ }
+ busy=true;buttons();message('Generating the final 20 paired locations privately on the server…');
+ try{
+  const result=await invoke({action:'activateFocused',requestId:pending.requestId,
+    focusPolygons});
+  clearPending();ready=false;
+  await load();
+  message('FINAL BATCH ADDED: 20 matched pairs, locations '+result.firstSequence+'–'+
+    (result.firstSequence+19)+'. No further assignment additions will be allowed. '+
+    'The reveal is separate and has NOT happened.');
+ }catch(e){
+  message('Final activation outcome is unconfirmed: '+(e?.message||String(e))+
+   '\nUse Refresh before retrying. The same request ID prevents duplicates.');
+ }finally{busy=false;buttons()}
+}
+$('focusActivate').onclick=activateFocused;
+
+$('refresh').onclick=load;
+$('activate').onclick=activate;
+
+
+$('refresh').disabled=true;
+$('stageLogin').onclick=async()=>{
+ const key=$('stageKey').value.trim();
+ const password=$('stagePassword').value;
+ if(!/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)||!password){
+  $('stageMessage').textContent='Enter the staging publishable key and synthetic password.';return;
+ }
+ $('stageLogin').disabled=true;
+ try{
+  if(!globalThis.supabase?.createClient)throw Error('Supabase library unavailable');
+  client=globalThis.supabase.createClient(STAGING_URL,key,{
+   auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+  });
+  const {error}=await client.auth.signInWithPassword({
+   email:'staging-admin@example.invalid',password
+  });
+  if(error)throw Error(error.message);
+  $('stagePassword').value='';
+  $('stageLoginPanel').hidden=true;
+  await load();
+ }catch(e){$('stageMessage').textContent=e?.message||String(e)}
+ finally{$('stageLogin').disabled=false}
+};
+message('Sign in to synthetic STAGING only. This is not the live study.');
+
+</script></body></html>
