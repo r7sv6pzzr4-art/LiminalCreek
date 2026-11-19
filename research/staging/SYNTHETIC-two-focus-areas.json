@@ -1,0 +1,76 @@
+{
+  "polygons": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "synthetic": true
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                -74.184,
+                40.31
+              ],
+              [
+                -74.178,
+                40.31
+              ],
+              [
+                -74.178,
+                40.314
+              ],
+              [
+                -74.184,
+                40.314
+              ],
+              [
+                -74.184,
+                40.31
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "synthetic": true
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                -74.161,
+                40.338
+              ],
+              [
+                -74.155,
+                40.338
+              ],
+              [
+                -74.155,
+                40.342
+              ],
+              [
+                -74.161,
+                40.342
+              ],
+              [
+                -74.161,
+                40.338
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "pairs": [],
+  "responses": [],
+  "syntheticTestFile": true
+}
