@@ -22,6 +22,9 @@ button#activate{width:100%;margin-top:16px;text-align:center}
 .small{font-size:.87rem;color:#b3c8ba}
 .good{color:#b9e1b7}.warning{color:#ffd29d}
 #message{white-space:pre-wrap}
+#focusStatus{margin-top:10px}
+input[type=file]{font-size:.93rem}
+#focusActivate{width:100%;margin-top:12px}
 dl{display:grid;grid-template-columns:1fr auto;gap:10px}dt,dd{margin:0}
 a{color:#d0e9d2}button#refresh{padding:7px 12px}
 [hidden]{display:none!important}
@@ -57,6 +60,14 @@ a{color:#d0e9d2}button#refresh{padding:7px 12px}
 <button id="activate" disabled>Generate and add selected pairs</button>
 <p class="small">A batch is appended after the locations already assigned to each participant. Each receives one location per pair, in independently randomized order. To avoid accidentally stacking work, an unstarted future batch prevents another activation.</p>
 <p class="warning">Adding a batch permanently appends new assignments for both participants. No existing assignments or submitted impressions are modified.</p>
+</section>
+<section class="panel" id="finalFocusPanel"><h2>Final focused batch</h2>
+<p>For the last sampling round before the reveal, generate <strong>20 randomly spaced matched pairs</strong>: 10 in each of two administrator-supplied polygons. This is response-blind and separate from the adaptive ratios above.</p>
+<label for="focusFile">Two-area export from the old LiminalCreek prototype (.json or .geojson)</label>
+<input type="file" id="focusFile" accept=".json,.geojson,application/json"/>
+<p id="focusStatus" class="small" aria-live="polite">No area file selected. Your file is not uploaded until you explicitly activate the final batch.</p>
+<button id="focusActivate" disabled>Generate and add FINAL 20 matched pairs</button>
+<p class="warning">Final means final: once successfully added, the system will refuse all further batches. Existing answers remain blinded; revealing results remains a separate decision. Do not activate until you are ready for this to be the last set.</p>
 </section></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -81,12 +92,15 @@ const pendingKey='liminal-admin-activation-request-v2';
 function readPending(){
  try{
   const p=JSON.parse(sessionStorage.getItem(pendingKey)||'null');
-  if(p&&[10,20,30,40].includes(p.count)&&[50,75].includes(p.adaptivePercent)&&
-     typeof p.requestId==='string')return p;
+  if(p&&typeof p.requestId==='string'&&(
+     (p.type==='focused'&&p.count===20&&p.adaptivePercent===0&&typeof p.focusDigest==='string') ||
+     ((!p.type||p.type==='adaptive')&&[10,20,30,40].includes(p.count)&&[50,75].includes(p.adaptivePercent))
+    ))return p;
  }catch(e){}
  return null;
 }
 let pending=readPending();
+let focusPolygons=null,focusDigest=null;
 function rememberPending(p){
  pending=p;
  try{sessionStorage.setItem(pendingKey,JSON.stringify(p))}catch(e){}
@@ -97,7 +111,10 @@ function clearPending(){
 }
 function message(t){$('message').textContent=t}
 function buttons(){
- $('activate').disabled=!ready||busy;
+ $('activate').disabled=!ready||busy||(pending?.type==='focused');
+ $('focusActivate').disabled=!ready||busy||!focusPolygons||
+   (pending?.type&&pending.type!=='focused')||!!lastStatus?.finalFocused;
+ $('focusFile').disabled=busy;
  $('pairCount').disabled=busy||!!pending;
  $('adaptivePercent').disabled=busy||!!pending;
  $('refresh').disabled=busy;
@@ -134,6 +151,7 @@ function showStatus(s){
   $('adaptivePercent').value=String(s.recommendedAdaptivePercent);
  ready=!!s.canActivate;
  $('readiness').textContent=ready?'Ready to add upcoming locations':
+   s.finalFocused?'Final focused batch already assigned; no more batches permitted':
    s.unstartedBatchQueued?'An upcoming batch is already queued':
    'Study assignment inventory is not yet ready';
  $('readiness').className=ready?'good':'warning';
@@ -150,13 +168,17 @@ async function load(){
   showStatus(s);
   if(confirmed)message('Confirmed: the earlier request added '+confirmed.addedPairs+
     ' pairs, beginning at location '+confirmed.firstSequence+'. No duplicate was created.');
-  else if(pending){
+  else if(pending?.type==='focused'){
+   message('A final-focused activation is not confirmed. Use Refresh to verify. '+
+    'If retrying after a network error, select the same two-area export again.');
+  }else if(pending){
    $('pairCount').value=String(pending.count);
    $('adaptivePercent').value=String(pending.adaptivePercent);
    message('A previous activation is not yet confirmed. Use Refresh to verify; '+
     (ready?'the same button will retry the original request safely.':
      'a batch may still be processing.'));
   }else message(ready?'Administrator verified. You can append locations before either current set is finished.':
+   s.finalFocused?'The final focused batch has been assigned. No further additions are allowed.':
    s.unstartedBatchQueued?'One future batch is already in the queue. Let one participant begin it before adding another.':
    'Administrator verified. Activation is unavailable until the study inventory is valid.');
  }catch(e){
@@ -174,7 +196,7 @@ async function activate(){
   if(!window.confirm('Generate and append '+count+' new paired locations to BOTH participants using '+
     adaptivePercent+'% adaptive sampling?\nResponses currently submitted: '+
     completed+'.\nExisting locations will remain in order.'))return;
-  rememberPending({count,adaptivePercent,requestId:crypto.randomUUID()});
+  rememberPending({type:'adaptive',count,adaptivePercent,requestId:crypto.randomUUID()});
  }
  const requestId=pending.requestId;
  busy=true;buttons();message('Generating '+count+' matched pairs from submitted responses…');
@@ -192,6 +214,73 @@ async function activate(){
 }
 $('pairCount').addEventListener('change',()=>{selectionChanged=true});
 $('adaptivePercent').addEventListener('change',()=>{selectionChanged=true});
+
+function normalizeFocusExport(raw){
+ const source=raw?.polygons||raw;
+ if(source?.type!=='FeatureCollection'||!Array.isArray(source.features)||
+    source.features.length!==2)throw Error('The file must define exactly two polygon features.');
+ const features=source.features.map((f,i)=>{
+  const g=f?.geometry;
+  if(g?.type!=='Polygon'||!Array.isArray(g.coordinates)||g.coordinates.length!==1)
+   throw Error('Focus area '+(i+1)+' must be a single simple polygon.');
+  const ring=g.coordinates[0];
+  if(!Array.isArray(ring)||ring.length<4||ring.length>250||
+     !ring.every(p=>Array.isArray(p)&&p.length===2&&
+       p.every(Number.isFinite)&&p[0]>=-180&&p[0]<=180&&p[1]>=-90&&p[1]<=90))
+   throw Error('Focus area '+(i+1)+' contains invalid coordinates.');
+  if(ring[0][0]!==ring.at(-1)[0]||ring[0][1]!==ring.at(-1)[1])
+   throw Error('Focus area '+(i+1)+' is not a closed polygon.');
+  return {type:'Feature',properties:{},
+          geometry:{type:'Polygon',coordinates:[ring]}};
+ });
+ return {type:'FeatureCollection',features};
+}
+$('focusFile').addEventListener('change',async()=>{
+ focusPolygons=null;focusDigest=null;buttons();
+ const file=$('focusFile').files?.[0];
+ if(!file){$('focusStatus').textContent='No focus-area file selected.';return}
+ if(file.size>120000){$('focusStatus').textContent='File is too large for a two-polygon export.';return}
+ try{
+  const parsed=normalizeFocusExport(JSON.parse(await file.text()));
+  const bytes=new TextEncoder().encode(JSON.stringify(parsed));
+  const sha=await crypto.subtle.digest('SHA-256',bytes);
+  focusDigest=Array.from(new Uint8Array(sha)).map(n=>n.toString(16).padStart(2,'0')).join('');
+  if(pending?.type==='focused'&&pending.focusDigest!==focusDigest)
+   throw Error('A previous final activation is pending. Re-select the same export before retrying.');
+  focusPolygons=parsed;
+  $('focusStatus').textContent='Two focus areas validated (10 pairs in each). '+
+   'The engine will check official boundaries and avoid previous assignments at activation.';
+ }catch(e){$('focusStatus').textContent='Cannot use file: '+(e?.message||String(e))}
+ buttons();
+});
+async function activateFocused(){
+ if(!ready||busy||!focusPolygons||lastStatus?.finalFocused)return;
+ if(!pending){
+  if(!window.confirm('FINAL STUDY BATCH: Generate 20 new matched pairs, '+
+   '10 randomly spaced inside each selected focus polygon, and append them '+
+   'to BOTH participants? Future batch activation will be permanently disabled. '+
+   'Submitted impressions will stay private until a separate reveal action.'))return;
+  rememberPending({type:'focused',count:20,adaptivePercent:0,focusDigest,requestId:crypto.randomUUID()});
+ }
+ if(pending.type!=='focused'||pending.focusDigest!==focusDigest){
+  message('Another activation is pending, or the focus area file has changed. Refresh first.');return;
+ }
+ busy=true;buttons();message('Generating the final 20 paired locations privately on the server…');
+ try{
+  const result=await invoke({action:'activateFocused',requestId:pending.requestId,
+    focusPolygons});
+  clearPending();ready=false;
+  await load();
+  message('FINAL BATCH ADDED: 20 matched pairs, locations '+result.firstSequence+'–'+
+    (result.firstSequence+19)+'. No further assignment additions will be allowed. '+
+    'The reveal is separate and has NOT happened.');
+ }catch(e){
+  message('Final activation outcome is unconfirmed: '+(e?.message||String(e))+
+   '\nUse Refresh before retrying. The same request ID prevents duplicates.');
+ }finally{busy=false;buttons()}
+}
+$('focusActivate').onclick=activateFocused;
+
 $('refresh').onclick=load;
 $('activate').onclick=activate;
 
