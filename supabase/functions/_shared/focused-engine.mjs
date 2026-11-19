@@ -127,6 +127,8 @@ export function generateFocusedBatch({focusPolygons,eligible,existingPairs,seed,
     oldPoints.push(pair.A,pair.B);
   }
   const groups=[];
+  // Enforce spacing across BOTH areas, including their shared/nearby edges.
+  const allCenters=[];
   for(let area=0;area<2;area++){
     const rng=seeded(seed+"-area-"+area),ring=polygons[area];
     const pool=candidatePool({ring,allowed:eligible,oldPoints,rng});
@@ -137,12 +139,12 @@ export function generateFocusedBatch({focusPolygons,eligible,existingPairs,seed,
       for(const c of pool){
         if(c.used)continue;
         let nearest=Infinity;
-        for(const other of centers)nearest=Math.min(nearest,distance(c.p,other));
+        for(const other of allCenters)nearest=Math.min(nearest,distance(c.p,other));
         if(nearest<57)continue;
         // Prefer broad spatial dispersion but keep selections randomized.
         // The capped historical-distance term prevents past sites from
         // pushing every new location toward the boundary.
-        const spacing=i===0?125:Math.min(nearest,250);
+        const spacing=allCenters.length===0?125:Math.min(nearest,250);
         const oldBonus=Math.min(c.oldDistance,95)*0.25;
         const score=spacing+oldBonus+25*rng();
         ranked.push({c,score});
@@ -152,7 +154,7 @@ export function generateFocusedBatch({focusPolygons,eligible,existingPairs,seed,
       let picked=null,secondary=null;
       for(const {c} of ranked.slice(0,180)){
         const q=companion({center:c.p,ring,allowed:eligible,
-          oldPoints,otherCenters:centers,rng});
+          oldPoints,otherCenters:allCenters,rng});
         if(q){picked=c;secondary=q;break}
       }
       assert(picked&&secondary,
@@ -167,6 +169,7 @@ export function generateFocusedBatch({focusPolygons,eligible,existingPairs,seed,
         "Focused endpoint outside a requested or eligible polygon");
       selected.push({area:area+1,mode:"focused",A,B});
       centers.push(picked.p);
+      allCenters.push(picked.p);
     }
     groups.push(...selected);
   }
