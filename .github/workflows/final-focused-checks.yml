@@ -1,0 +1,48 @@
+name: Isolated final-focused sampling checks
+on:
+  push:
+    branches: [feature/final-focused-batch-20261118]
+    paths:
+      - 'supabase/functions/**'
+      - 'research/tests/focused-engine.test.mjs'
+      - 'research/tests/final-focused-smoke.sql'
+      - 'release/final-focused-migration.REVIEW-ONLY.sql'
+      - 'release/production-adaptive-migration.REVIEW-ONLY.sql'
+      - 'admin-adaptive.html'
+      - '.github/workflows/final-focused-checks.yml'
+  workflow_dispatch:
+
+jobs:
+  node-geometry:
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: node --test research/tests/focused-engine.test.mjs
+  disposable-postgres:
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run protected final-batch lifecycle in an isolated database
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="lc-focused-${GITHUB_RUN_ID}"
+          docker run -d --name "$container" \
+            -e POSTGRES_PASSWORD=synthetic-test-password \
+            -v "$PWD:/app:ro" postgres:16
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          ready=false
+          for i in $(seq 1 60); do
+            if docker exec "$container" pg_isready -h 127.0.0.1 -U postgres -q; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then exit 1; fi
+          docker exec "$container" psql -h 127.0.0.1 -U postgres -d postgres \
+            -X -v ON_ERROR_STOP=1 -f /app/research/tests/final-focused-smoke.sql
