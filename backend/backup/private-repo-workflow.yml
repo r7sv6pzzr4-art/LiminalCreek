@@ -1,0 +1,133 @@
+# COPY THIS FILE to .github/workflows/daily-study-backup.yml
+# inside a DIFFERENT, PRIVATE GitHub repository.
+# DO NOT install this workflow in the public LiminalCreek repository.
+name: Daily LiminalCreek backup (private)
+
+on:
+  schedule:
+    - cron: '23 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: liminalcreek-backup
+  cancel-in-progress: false
+
+jobs:
+  daily-backup:
+    if: github.event.repository.private == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: ${{ secrets.LIMINAL_BACKUP_DATABASE_URL }}
+
+    steps:
+      - name: Checkout audited public verification scripts
+        uses: actions/checkout@v4
+        with:
+          repository: r7sv6pzzr4-art/LiminalCreek
+          ref: main
+          path: study-code
+          persist-credentials: false
+
+      - name: Check secure configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$DATABASE_URL" ]]; then
+            echo "::error::Set LIMINAL_BACKUP_DATABASE_URL in private repository Actions secrets."
+            exit 1
+          fi
+          mkdir -p backup-work
+          chmod 700 backup-work
+
+      - name: Capture read-only live data fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network host -e DATABASE_URL="$DATABASE_URL" \
+            -v "$PWD/study-code:/scripts:ro" postgres:18 \
+            sh -c 'exec psql --dbname="$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -f /scripts/backend/backup/internal-health-snapshot.sql' \
+            > backup-work/live-before.json
+          test -s backup-work/live-before.json
+
+      - name: Create consistent database backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          docker run --rm --network host -e DATABASE_URL="$DATABASE_URL" \
+            -v "$PWD/backup-work:/backup" postgres:18 \
+            sh -c 'exec pg_dump --dbname="$DATABASE_URL" --format=custom --schema=public --no-owner --file=/backup/study-public.dump'
+          test -s backup-work/study-public.dump
+
+      - name: Capture live data fingerprint after export
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network host -e DATABASE_URL="$DATABASE_URL" \
+            -v "$PWD/study-code:/scripts:ro" postgres:18 \
+            sh -c 'exec psql --dbname="$DATABASE_URL" -X -A -t -q -v ON_ERROR_STOP=1 -f /scripts/backend/backup/internal-health-snapshot.sql' \
+            > backup-work/live-after.json
+          test -s backup-work/live-after.json
+
+      - name: Recover all four study tables into a temporary database
+        shell: bash
+        run: |
+          set -euo pipefail
+          recovery="liminal-restore-${{ github.run_id }}"
+          cleanup() { docker rm -f "$recovery" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          docker run -d --name "$recovery" \
+            -e POSTGRES_PASSWORD=temporary-test-only \
+            -v "$PWD/backup-work:/backup:ro" postgres:18 >/dev/null
+          for i in $(seq 1 40); do
+            if docker exec "$recovery" pg_isready -U postgres -q; then break; fi
+            sleep 1
+          done
+          docker exec -i "$recovery" psql -U postgres -d postgres \
+            -X -q -v ON_ERROR_STOP=1 \
+            < study-code/backend/backup/scratch-tables.sql
+
+          for table in studies participants assignments responses; do
+            docker exec "$recovery" pg_restore -U postgres -d postgres \
+              --data-only --no-owner --no-acl --exit-on-error \
+              --table="$table" /backup/study-public.dump
+          done
+
+          docker exec -i "$recovery" psql -U postgres -d postgres \
+            -X -A -t -q -v ON_ERROR_STOP=1 \
+            < study-code/backend/backup/internal-health-snapshot.sql \
+            > backup-work/recovered.json
+
+          python3 study-code/backend/backup/compare-snapshots.py \
+            backup-work/live-before.json \
+            backup-work/live-after.json \
+            backup-work/recovered.json
+
+          # Only the database archive and its file hash will be retained;
+          # live snapshots contain aggregate digests and stay on ephemeral runner.
+          cd backup-work
+          sha256sum study-public.dump > study-public.dump.sha256
+
+      - name: Store backup in PRIVATE GitHub Actions artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: liminal-study-${{ github.run_id }}
+          path: |
+            backup-work/study-public.dump
+            backup-work/study-public.dump.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Report status without revealing answers
+        run: echo "PASS - database archive created, restored into a disposable database, and all stored study records and comments verified."
+
+# Initial setup: create a separate PRIVATE GitHub repo and paste this file
+# at .github/workflows/daily-study-backup.yml. Add ONE Actions secret:
+# LIMINAL_BACKUP_DATABASE_URL = Supabase session-pooler connection URL.
+# Never paste the database URL into chat or source code.
