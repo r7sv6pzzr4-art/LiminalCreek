@@ -3,6 +3,7 @@
 // No live deployment is performed by this file.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateBatch, distance } from "../_shared/adaptive-engine.mjs";
+import { generateFocusedBatch } from "../_shared/focused-engine.mjs";
 
 const URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -98,7 +99,7 @@ Deno.serve(async req=>{
    if(error)throw Error(error.message);
    return reply({status:data});
   }
-  if(payload?.action!=="activate"&&payload?.action!=="check")
+  if(!["activate","activateFocused","check"].includes(payload?.action))
    return fail("Unknown action",400);
   const requestId=String(payload.requestId||"");
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))
@@ -106,21 +107,26 @@ Deno.serve(async req=>{
   // A prior committed request must be recognized even if today's assignment
   // queue is no longer ready. This prevents duplicate creation on lost replies.
   const {data:prior,error:priorError}=await admin.from("liminal_auto_batches")
-   .select("id,pair_count,first_sequence,adaptive_percent").eq("study_id",membership.study_id)
+   .select("id,pair_count,first_sequence,adaptive_percent,batch_kind").eq("study_id",membership.study_id)
    .eq("request_id",requestId).maybeSingle();
   if(priorError)throw Error("Could not verify previous activation");
   if(payload.action==="check")
    return reply({committed:!!prior,addedPairs:prior?.pair_count||0,
-    firstSequence:prior?.first_sequence||null,batchId:prior?.id||null});
-  const requested=payload.count;
-  const requestedPercent=payload.adaptivePercent;
-  if(![10,20,30,40].includes(requested))return fail("Choose 10, 20, 30 or 40 pairs",400);
-  if(![50,75].includes(requestedPercent))return fail("Choose 50% or 75% response-informed",400);
+    firstSequence:prior?.first_sequence||null,batchId:prior?.id||null,
+    batchKind:prior?.batch_kind||null});
+  const focused=payload.action==="activateFocused";
+  const requested=focused?20:payload.count;
+  const requestedPercent=focused?0:payload.adaptivePercent;
+  if(!focused && ![10,20,30,40].includes(requested))
+   return fail("Choose 10, 20, 30 or 40 pairs",400);
+  if(!focused && ![50,75].includes(requestedPercent))
+   return fail("Choose 50% or 75% response-informed",400);
   if(prior){
-   if(prior.pair_count!==requested||prior.adaptive_percent!==requestedPercent)
+   if(prior.pair_count!==requested||prior.adaptive_percent!==requestedPercent||
+      (focused?prior.batch_kind!=="focused_final":prior.batch_kind!=="adaptive"))
     return fail("Request ID already used with another batch setting",409);
    return reply({activated:true,alreadyCommitted:true,addedPairs:prior.pair_count,
-    firstSequence:prior.first_sequence,batchId:prior.id});
+    firstSequence:prior.first_sequence,batchId:prior.id,batchKind:prior.batch_kind});
   }
   const {data:status,error:statusError}=await caller.rpc("liminal_admin_auto_status");
   if(statusError||!status?.canActivate)return fail(
@@ -182,10 +188,12 @@ Deno.serve(async req=>{
   // Both participants' assigned coordinates are used to avoid repeats, but
   // ONLY submitted responses enter the adaptive evidence calculation.
   // Incomplete current sets are never treated as neutral observations.
-  const next=generateBatch({count:requested,bounds,eligible,
-   observations,existingPairs,
-   batchIndex:Number(status.releasedBatches||0)+1,
-   seed,adaptivePercent:requestedPercent});
+  // The final focused mode is response-blind: only uploaded private focus
+  // polygons and existing assigned locations affect site selection.
+  const next=focused?
+   generateFocusedBatch({focusPolygons:payload.focusPolygons,eligible,existingPairs,seed}):
+   generateBatch({count:requested,bounds,eligible,observations,existingPairs,
+    batchIndex:Number(status.releasedBatches||0)+1,seed,adaptivePercent:requestedPercent});
   requireCheck(next.pairs.length===requested,"Sampling engine returned the wrong count");
   const requestedRows:any[]=[];
   for(const pair of next.pairs){
@@ -193,20 +201,32 @@ Deno.serve(async req=>{
     "Generated candidate fails geographic validation");
    requestedRows.push({pairId:crypto.randomUUID(),mode:pair.mode,
     longitudeA:pair.A[0],latitudeA:pair.A[1],
-    longitudeB:pair.B[0],latitudeB:pair.B[1],adaptivePercent:requestedPercent});
+    longitudeB:pair.B[0],latitudeB:pair.B[1],adaptivePercent:requestedPercent,
+    ...(focused?{focusArea:pair.area}:{} )});
   }
   const orderA=randomizedOrder(requested);
   const orderB=randomizedOrder(requested);
   requestedRows.forEach((r,i)=>{r.orderA=orderA[i];r.orderB=orderB[i]});
-  const {data:result,error:commitError}=await admin.rpc("liminal_admin_commit_auto_batch",{
-   p_actor_user_id:identity.user.id,
-   p_request_id:requestId,
-   p_expected_assignment_rows:assignments.length,
-   p_expected_response_rows:responses.length,
-   p_seed:seed,p_adaptive_percent:requestedPercent,p_pairs:requestedRows
-  });
+  const commitArgs=focused?{
+    p_actor_user_id:identity.user.id,
+    p_request_id:requestId,
+    p_expected_assignment_rows:assignments.length,
+    p_expected_response_rows:responses.length,
+    p_seed:seed,p_focus_polygons:next.focusPolygons,p_pairs:requestedRows
+   }:{
+    p_actor_user_id:identity.user.id,
+    p_request_id:requestId,
+    p_expected_assignment_rows:assignments.length,
+    p_expected_response_rows:responses.length,
+    p_seed:seed,p_adaptive_percent:requestedPercent,p_pairs:requestedRows
+   };
+  const {data:result,error:commitError}=await admin.rpc(
+   focused?"liminal_admin_commit_focused_batch":"liminal_admin_commit_auto_batch",
+   commitArgs
+  );
   if(commitError)throw Error(commitError.message);
   return reply({activated:true,addedPairs:result.addedPairs,adaptivePercent:requestedPercent,
+   batchKind:focused?"focused_final":"adaptive",
    firstSequence:result.firstSequence,batchId:result.batchId,
    alreadyCommitted:result.alreadyCommitted});
  }catch(e){
