@@ -5,6 +5,8 @@ on:
     paths:
       - 'supabase/functions/**'
       - 'research/tests/focused-engine.test.mjs'
+      - 'research/tests/focused-ui.test.mjs'
+      - 'research/staging/admin-final-focused.STAGING-ONLY.html'
       - 'research/tests/final-focused-smoke.sql'
       - 'release/final-focused-migration.REVIEW-ONLY.sql'
       - 'release/production-adaptive-migration.REVIEW-ONLY.sql'
@@ -20,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
-      - run: node --test research/tests/focused-engine.test.mjs
+      - run: node --test research/tests/focused-engine.test.mjs research/tests/focused-ui.test.mjs
   disposable-postgres:
     runs-on: ubuntu-latest
     permissions: {contents: read}
