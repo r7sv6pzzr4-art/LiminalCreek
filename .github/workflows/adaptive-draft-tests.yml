@@ -1,0 +1,16 @@
+name: Check inactive adaptive draft
+# Draft-only: run intentionally from Actions rather than on every edit.
+# Prevents repeated notifications while this feature is under development.
+on:
+  workflow_dispatch:
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test research/*.test.js
